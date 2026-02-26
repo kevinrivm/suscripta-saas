@@ -20,9 +20,9 @@ export default function Home() {
           <a href="#como-funciona" className="hover:text-emerald-400 transition-colors">Integración Meta</a>
           <a href="#beneficios" className="hover:text-emerald-400 transition-colors">Beneficios</a>
         </nav>
-        <button className="px-5 py-2.5 text-sm font-medium rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all backdrop-blur-md">
+        <Link href="/dashboard" className="px-5 py-2.5 text-sm font-medium rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition-all backdrop-blur-md">
           Iniciar Sesión
-        </button>
+        </Link>
       </header>
 
       {/* Hero Section */}
@@ -44,12 +44,12 @@ export default function Home() {
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-          <button className="px-8 py-4 rounded-full bg-emerald-500 text-black font-semibold hover:bg-emerald-400 transition-all shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:shadow-[0_0_40px_rgba(16,185,129,0.5)] transform hover:-translate-y-1">
-            Conectar mi WhatsApp
-          </button>
-          <button className="px-8 py-4 rounded-full bg-transparent border border-zinc-700 text-white font-medium hover:border-zinc-500 hover:bg-zinc-800/50 transition-all">
+          <Link href="/dashboard" className="px-8 py-4 rounded-full bg-emerald-500 text-black font-semibold hover:bg-emerald-400 transition-all shadow-[0_0_30px_rgba(16,185,129,0.3)] hover:shadow-[0_0_40px_rgba(16,185,129,0.5)] transform hover:-translate-y-1 text-center">
+            Comenzar Prueba Gratis
+          </Link>
+          <Link href="/dashboard" className="px-8 py-4 rounded-full bg-transparent border border-zinc-700 text-white font-medium hover:border-zinc-500 hover:bg-zinc-800/50 transition-all text-center">
             Agendar Demo
-          </button>
+          </Link>
         </div>
 
         {/* Feature Highlights - Glass Panels */}
