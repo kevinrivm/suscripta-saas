@@ -30,6 +30,7 @@ interface EmbeddedSignupData {
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
 const CONFIG_ID = '1585204056102996';
+const REDIRECT_URI = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI ?? 'https://suscripta-dev.aishiagency.tech/oauth/callback';
 
 interface EmbeddedSignupButtonProps {
     onSuccess?: (wabaId: string, phoneNumberId: string) => void;
@@ -131,10 +132,9 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
         window.FB.login(
             (response: FBLoginResponse) => {
                 if (response.authResponse?.code) {
-                    // Auth code received — can be exchanged for a System User token on the backend
-                    console.log('[Suscripta] Auth code received:', response.authResponse.code);
-                    // TODO: POST code to /api/whatsapp/exchange-token
-                    // The success callback fires from the 'WA_EMBEDDED_SIGNUP' window message
+                    // Auth code received — Meta will also redirect to REDIRECT_URI with the code as a query param
+                    console.log('[Suscripta] Auth code received via callback:', response.authResponse.code);
+                    // The page will navigate to /oauth/callback automatically via the redirect_uri
                 } else {
                     setIsLoading(false);
                     if (response.status === 'unknown' || !response.authResponse) {
@@ -148,6 +148,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                 config_id: CONFIG_ID,
                 response_type: 'code',
                 override_default_response_type: true,
+                redirect_uri: REDIRECT_URI,
                 extras: {
                     setup: {},
                     featureType: 'coexistence',
