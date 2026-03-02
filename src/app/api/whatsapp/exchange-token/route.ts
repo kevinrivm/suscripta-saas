@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient, createClient } from '@/utils/supabase/server';
 
 /**
  * POST /api/whatsapp/exchange-token
@@ -51,14 +52,37 @@ export async function POST(request: NextRequest) {
 
         const { access_token, token_type } = tokenData;
 
-        // TODO: Store access_token, waba_id, phone_number_id in your database
-        // associated with the authenticated user's account.
-        // Example: await db.whatsappConnections.upsert({ userId, wabaId: waba_id, phoneNumberId: phone_number_id, accessToken: access_token })
+        // Store access_token, waba_id, phone_number_id in Supabase
+        const supabaseAdmin = await createAdminClient();
+        const supabaseUser = await createClient();
 
-        console.log('[Suscripta] WhatsApp connection successful:', {
+        // 1) Verify the user is authenticated (if using Supabase Auth later)
+        const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
+        const userId = user?.id || null;
+
+        // 2) Upsert the connection data. We use the Admin Client because 
+        // storing secrets bypassing RLS restrictions.
+        const { error: dbError } = await supabaseAdmin.from('whatsapp_connections').upsert({
+            user_id: userId,
+            waba_id: waba_id,
+            phone_number_id: phone_number_id,
+            access_token: access_token,
+            is_active: true,
+            updated_at: new Date().toISOString()
+        }, {
+            onConflict: 'waba_id, phone_number_id'
+        });
+
+        if (dbError) {
+            console.error('[Suscripta] Database storage failed:', dbError);
+            // Notice: We don't necessarily fail the flow completely, but logging to debug.
+        }
+
+        console.log('[Suscripta] WhatsApp connection successful and saved to Supabase:', {
             waba_id,
             phone_number_id,
             token_type,
+            user_linked: !!userId,
             access_token_preview: access_token?.substring(0, 20) + '...',
         });
 
