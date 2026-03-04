@@ -95,7 +95,10 @@ export async function POST(request: NextRequest) {
 
         if (dbError) {
             console.error('[Suscripta] Database storage failed:', dbError);
-            // Notice: We don't necessarily fail the flow completely, but logging to debug.
+            return NextResponse.json(
+                { error: `No se pudo guardar la conexión en la base de datos: ${dbError.message || JSON.stringify(dbError)}` },
+                { status: 500 }
+            );
         }
 
         console.log('[Suscripta] WhatsApp connection successful and saved to Supabase:', {
