@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { EmbeddedSignupButton } from '@/components/EmbeddedSignupButton';
-import { getWhatsAppConnection } from '@/app/actions/whatsapp';
+import { getWhatsAppConnection, disconnectWhatsApp } from '@/app/actions/whatsapp';
+
 
 interface ConnectionStatus {
     wabaId: string;
@@ -48,6 +49,21 @@ export default function DashboardOverview() {
         setError(msg);
     };
 
+    const handleDisconnect = async () => {
+        const confirmed = confirm("¿Estás seguro que deseas desconectar tu número? Dejarás de enviar recordatorios.");
+        if (confirmed) {
+            setIsLoading(true);
+            try {
+                await disconnectWhatsApp();
+                setConnection(null);
+            } catch (err) {
+                console.error("Error al desconectar", err);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
+
     return (
         <div className="p-10 max-w-5xl mx-auto w-full">
             <div className="mb-10">
@@ -55,7 +71,7 @@ export default function DashboardOverview() {
                 <p className="text-zinc-400">Configura tu cuenta para empezar a reducir el churn automáticamente.</p>
             </div>
 
-            <div className="glass-panel p-8 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col items-center justify-center text-center max-w-3xl mx-auto shadow-[0_0_50px_rgba(16,185,129,0.1)]">
+            <div className="glass-panel p-8 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col items-center justify-center text-center max-w-3xl mx-auto shadow-[0_0_50px_rgba(16,185,129,0.1)] relative">
 
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center space-y-4 py-8">
@@ -111,6 +127,13 @@ export default function DashboardOverview() {
                                 <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-xs">{connection.phoneNumberId}</span>
                             </div>
                         </div>
+
+                        <button
+                            onClick={handleDisconnect}
+                            className="mt-6 px-4 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors border border-transparent hover:border-red-500/20"
+                        >
+                            Desconectar Número
+                        </button>
                     </>
                 ) : (
                     // 🔌 Default: Connect State

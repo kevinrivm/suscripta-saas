@@ -30,3 +30,25 @@ export async function getWhatsAppConnection() {
 
     return data || null;
 }
+
+export async function disconnectWhatsApp() {
+    const supabaseUser = await createClient();
+    const { data: { user } } = await supabaseUser.auth.getUser();
+
+    const supabaseAdmin = await createAdminClient();
+
+    if (user) {
+        await supabaseAdmin
+            .from('whatsapp_connections')
+            .delete()
+            .eq('user_id', user.id);
+    } else {
+        // Fallback demo: Delete all rows if no user exists so we can test again
+        await supabaseAdmin
+            .from('whatsapp_connections')
+            .delete()
+            .is('user_id', null);
+    }
+
+    return { success: true };
+}
