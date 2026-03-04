@@ -9,6 +9,8 @@ CREATE TABLE public.whatsapp_connections (
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE, -- Vinculado a Auth de Supabase
     waba_id TEXT NOT NULL,
     phone_number_id TEXT NOT NULL,
+    display_phone_number TEXT,
+    verified_name TEXT,
     access_token TEXT NOT NULL,
     is_active BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
@@ -54,3 +56,10 @@ CREATE TRIGGER update_whatsapp_connections_updated_at
 BEFORE UPDATE ON public.whatsapp_connections
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
+
+-- ==========================================
+-- SI YA HABÍAS CREADO LA TABLA ANTES, EJECUTA SOLO ESTO:
+-- ==========================================
+ALTER TABLE public.whatsapp_connections 
+ADD COLUMN IF NOT EXISTS display_phone_number TEXT,
+ADD COLUMN IF NOT EXISTS verified_name TEXT;

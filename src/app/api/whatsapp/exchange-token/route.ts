@@ -52,6 +52,24 @@ export async function POST(request: NextRequest) {
 
         const { access_token, token_type } = tokenData;
 
+        // 3) Additional Step: Fetch the actual phone number string and business name from Meta
+        let display_phone_number = null;
+        let verified_name = null;
+
+        try {
+            const phoneInfoRes = await fetch(`https://graph.facebook.com/v22.0/${phone_number_id}?access_token=${access_token}`);
+            const phoneInfoData = await phoneInfoRes.json();
+
+            if (phoneInfoData && !phoneInfoData.error) {
+                display_phone_number = phoneInfoData.display_phone_number;
+                verified_name = phoneInfoData.verified_name || null;
+            } else {
+                console.warn('[Suscripta] Could not fetch phone details:', phoneInfoData.error);
+            }
+        } catch (phoneErr) {
+            console.warn('[Suscripta] Error reaching Graph API for phone details:', phoneErr);
+        }
+
         // Store access_token, waba_id, phone_number_id in Supabase
         const supabaseAdmin = await createAdminClient();
         const supabaseUser = await createClient();
@@ -66,6 +84,8 @@ export async function POST(request: NextRequest) {
             user_id: userId,
             waba_id: waba_id,
             phone_number_id: phone_number_id,
+            display_phone_number: display_phone_number,
+            verified_name: verified_name,
             access_token: access_token,
             is_active: true,
             updated_at: new Date().toISOString()

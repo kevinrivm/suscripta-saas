@@ -1,16 +1,43 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { EmbeddedSignupButton } from '@/components/EmbeddedSignupButton';
+import { getWhatsAppConnection } from '@/app/actions/whatsapp';
 
 interface ConnectionStatus {
     wabaId: string;
     phoneNumberId: string;
+    displayPhoneNumber?: string | null;
+    verifiedName?: string | null;
+    status?: string | null; // active
 }
 
 export default function DashboardOverview() {
     const [connection, setConnection] = useState<ConnectionStatus | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        async function fetchConnection() {
+            try {
+                const data = await getWhatsAppConnection();
+                if (data) {
+                    setConnection({
+                        wabaId: data.waba_id,
+                        phoneNumberId: data.phone_number_id,
+                        displayPhoneNumber: data.display_phone_number,
+                        verifiedName: data.verified_name,
+                        status: data.is_active ? 'activo' : 'inactivo'
+                    });
+                }
+            } catch (err) {
+                console.error("No se pudo cargar la conexión de WhatsApp", err);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+        fetchConnection();
+    }, []);
 
     const handleSuccess = (wabaId: string, phoneNumberId: string) => {
         setConnection({ wabaId, phoneNumberId });
@@ -30,26 +57,58 @@ export default function DashboardOverview() {
 
             <div className="glass-panel p-8 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 flex flex-col items-center justify-center text-center max-w-3xl mx-auto shadow-[0_0_50px_rgba(16,185,129,0.1)]">
 
-                {connection ? (
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center space-y-4 py-8">
+                        <svg className="w-10 h-10 text-emerald-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        <p className="text-zinc-400">Verificando conexión de WhatsApp...</p>
+                    </div>
+                ) : connection ? (
                     // ✅ Success State
                     <>
-                        <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mb-6 border border-emerald-500/40">
+                        <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center mb-4 border border-emerald-500/40">
                             <svg className="w-8 h-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                         </div>
-                        <h2 className="text-2xl font-semibold mb-3 text-emerald-400">¡Número Vinculado!</h2>
-                        <p className="text-zinc-300 mb-6 max-w-lg leading-relaxed">
-                            Tu cuenta de WhatsApp Business ha sido conectada exitosamente a Suscripta.
-                        </p>
-                        <div className="w-full bg-black/30 rounded-xl p-4 text-left text-sm font-mono space-y-2 border border-white/5">
-                            <div className="flex justify-between">
-                                <span className="text-zinc-500">WABA ID</span>
-                                <span className="text-emerald-400">{connection.wabaId}</span>
+                        <h2 className="text-2xl font-semibold mb-2 text-emerald-400">¡Número Conectado!</h2>
+
+                        {connection.displayPhoneNumber ? (
+                            <div className="mb-6 flex flex-col items-center">
+                                <span className="text-3xl font-bold tracking-tight text-white mb-1">
+                                    {connection.displayPhoneNumber}
+                                </span>
+                                {connection.verifiedName && (
+                                    <span className="text-sm font-medium text-emerald-300">
+                                        {connection.verifiedName}
+                                    </span>
+                                )}
                             </div>
-                            <div className="flex justify-between">
+                        ) : (
+                            <p className="text-zinc-300 mb-6 max-w-lg leading-relaxed">
+                                Tu cuenta de WhatsApp Business ha sido conectada exitosamente a Suscripta.
+                            </p>
+                        )}
+
+                        <div className="w-full bg-black/30 rounded-xl p-4 text-left text-sm font-mono space-y-3 border border-white/5">
+                            {connection.status && (
+                                <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                                    <span className="text-zinc-500 font-sans">Estado</span>
+                                    <span className="bg-emerald-500/10 text-emerald-400 px-3 py-1 rounded-full font-sans font-medium text-xs uppercase flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        {connection.status}
+                                    </span>
+                                </div>
+                            )}
+                            <div className="flex justify-between items-center">
+                                <span className="text-zinc-500">WABA ID</span>
+                                <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-xs">{connection.wabaId}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
                                 <span className="text-zinc-500">Phone Number ID</span>
-                                <span className="text-emerald-400">{connection.phoneNumberId}</span>
+                                <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded text-xs">{connection.phoneNumberId}</span>
                             </div>
                         </div>
                     </>
