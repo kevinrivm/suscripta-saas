@@ -65,7 +65,7 @@ export function AppReviewConsole() {
     const [newTemplateName, setNewTemplateName] = useState('payment_reminder_review');
     const [newTemplateLanguage, setNewTemplateLanguage] = useState('en_US');
     const [newTemplateCategory, setNewTemplateCategory] = useState<'UTILITY' | 'MARKETING' | 'AUTHENTICATION'>('UTILITY');
-    const [newTemplateBody, setNewTemplateBody] = useState('Hello {{1}}, this is a payment reminder from Suscripta. Your subscription renews in {{2}} days. Complete payment here: {{3}}');
+    const [newTemplateBody, setNewTemplateBody] = useState('Hello {{1}}, this is a payment reminder from Suscripta. Your subscription renews in {{2}} days. Please complete payment here: {{3}} today.');
     const approvedTemplates = useMemo(
         () => bundle.templates.filter((template) => template.status.toUpperCase() === 'APPROVED'),
         [bundle.templates]

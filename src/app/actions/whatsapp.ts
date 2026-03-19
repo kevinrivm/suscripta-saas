@@ -69,6 +69,11 @@ function buildTemplateBodyExample(bodyText: string) {
     };
 }
 
+function hasLeadingOrTrailingTemplateVariable(bodyText: string) {
+    const trimmed = bodyText.trim();
+    return /^\{\{\d+\}\}/.test(trimmed) || /\{\{\d+\}\}$/.test(trimmed);
+}
+
 async function getStoredConnection(): Promise<StoredWhatsAppConnection | null> {
     const supabaseUser = await createClient();
     const {
@@ -228,6 +233,13 @@ export async function createWhatsAppTemplate(input: CreateTemplateInput) {
             return {
                 ok: false as const,
                 error: 'Template body text is required.',
+            };
+        }
+
+        if (hasLeadingOrTrailingTemplateVariable(input.bodyText)) {
+            return {
+                ok: false as const,
+                error: 'Template variables cannot appear at the very start or end of the message body. Add regular text before the first variable and after the last one.',
             };
         }
 
