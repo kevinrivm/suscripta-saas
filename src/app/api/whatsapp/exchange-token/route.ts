@@ -9,7 +9,12 @@ import { createAdminClient, createClient } from '@/utils/supabase/server';
  *
  * Meta Graph API endpoint:
  *   POST https://graph.facebook.com/v22.0/oauth/access_token
- *   Params: client_id, client_secret, code, redirect_uri (must match exactly)
+ *   Params: client_id, client_secret, code
+ *
+ * For the popup-based Embedded Signup flow we intentionally do not send
+ * redirect_uri in the token exchange. Meta issues the verification code from
+ * the JS SDK popup without a frontend redirect target, and sending one here
+ * causes a verification-code mismatch.
  */
 export async function POST(request: NextRequest) {
     try {
@@ -31,10 +36,8 @@ export async function POST(request: NextRequest) {
 
         const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
         const appSecret = process.env.FACEBOOK_APP_SECRET;
-        const redirectUri = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI;
-
         if (!appId || !appSecret) {
-            console.error('[Suscripta] Missing env vars:', { appId: !!appId, appSecret: !!appSecret, redirectUri: !!redirectUri });
+            console.error('[Suscripta] Missing env vars:', { appId: !!appId, appSecret: !!appSecret });
             return NextResponse.json(
                 { error: 'Server configuration error: missing environment variables.' },
                 { status: 500 }
@@ -46,9 +49,6 @@ export async function POST(request: NextRequest) {
         tokenUrl.searchParams.set('client_id', appId);
         tokenUrl.searchParams.set('client_secret', appSecret);
         tokenUrl.searchParams.set('code', code);
-        if (redirectUri) {
-            tokenUrl.searchParams.set('redirect_uri', redirectUri);
-        }
 
         const tokenResponse = await fetch(tokenUrl.toString(), { method: 'GET' });
         const tokenData = await tokenResponse.json();
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
         if (tokenData.error) {
             console.error('[Suscripta] Token exchange failed:', {
                 ...tokenData.error,
-                redirect_uri_used: redirectUri,
+                redirect_uri_used: null,
                 app_id_used: appId,
                 code_preview: String(code).substring(0, 24) + '...',
             });
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
                 {
                     error: `Meta token exchange failed: ${tokenData.error.message}`,
                     debug: {
-                        redirect_uri_used: redirectUri ?? null,
+                        redirect_uri_used: null,
                         app_id_used: appId,
                     },
                 },
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
             token_type,
             user_linked: !!userId,
             access_token_preview: access_token?.substring(0, 20) + '...',
-            redirect_uri_used: redirectUri,
+            redirect_uri_used: null,
         });
 
         return NextResponse.json({
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
             phone_number_id,
             token_type,
             debug: {
-                redirect_uri_used: redirectUri ?? null,
+                redirect_uri_used: null,
                 app_id_used: appId,
             },
             // Never return the raw access_token to the client in production!
