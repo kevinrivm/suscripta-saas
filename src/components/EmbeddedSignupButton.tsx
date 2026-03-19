@@ -47,6 +47,11 @@ export interface EmbeddedSignupDebugState {
     phoneNumberId: string | null;
     lastBackendStatus: number | null;
     lastBackendMessage: string | null;
+    backendRedirectUriUsed: string | null;
+    backendAppIdUsed: string | null;
+    frontendRedirectUriUsed: string | null;
+    frontendConfigIdUsed: string | null;
+    frontendAppIdUsed: string | null;
 }
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
@@ -76,6 +81,11 @@ const INITIAL_DEBUG_STATE: EmbeddedSignupDebugState = {
     phoneNumberId: null,
     lastBackendStatus: null,
     lastBackendMessage: null,
+    backendRedirectUriUsed: null,
+    backendAppIdUsed: null,
+    frontendRedirectUriUsed: REDIRECT_URI,
+    frontendConfigIdUsed: FACEBOOK_CONFIG_ID ?? null,
+    frontendAppIdUsed: FACEBOOK_APP_ID ?? null,
 };
 
 export function EmbeddedSignupButton({ onSuccess, onError, onDebugChange }: EmbeddedSignupButtonProps) {
@@ -142,6 +152,8 @@ export function EmbeddedSignupButton({ onSuccess, onError, onDebugChange }: Embe
                 updateDebugState({
                     lastBackendStatus: response.status,
                     lastBackendMessage: result.error ?? 'Unknown Meta token exchange error.',
+                    backendRedirectUriUsed: result.debug?.redirect_uri_used ?? null,
+                    backendAppIdUsed: result.debug?.app_id_used ?? null,
                 });
                 throw new Error(result.error ?? 'Unknown Meta token exchange error.');
             }
@@ -158,6 +170,8 @@ export function EmbeddedSignupButton({ onSuccess, onError, onDebugChange }: Embe
                 exchangeCompleted: true,
                 lastBackendStatus: response.status,
                 lastBackendMessage: result.message ?? 'Connection saved successfully.',
+                backendRedirectUriUsed: result.debug?.redirect_uri_used ?? null,
+                backendAppIdUsed: result.debug?.app_id_used ?? null,
             });
 
             onSuccessRef.current?.(payload.wabaId, payload.phoneNumberId);
@@ -321,6 +335,9 @@ export function EmbeddedSignupButton({ onSuccess, onError, onDebugChange }: Embe
             ...INITIAL_DEBUG_STATE,
             sdkLoaded: true,
             launchStarted: true,
+            frontendRedirectUriUsed: REDIRECT_URI,
+            frontendConfigIdUsed: FACEBOOK_CONFIG_ID ?? null,
+            frontendAppIdUsed: FACEBOOK_APP_ID ?? null,
         });
         setIsLoading(true);
 

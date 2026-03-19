@@ -55,10 +55,17 @@ export async function POST(request: NextRequest) {
             console.error('[Suscripta] Token exchange failed:', {
                 ...tokenData.error,
                 redirect_uri_used: redirectUri,
+                app_id_used: appId,
                 code_preview: String(code).substring(0, 24) + '...',
             });
             return NextResponse.json(
-                { error: `Meta token exchange failed: ${tokenData.error.message}` },
+                {
+                    error: `Meta token exchange failed: ${tokenData.error.message}`,
+                    debug: {
+                        redirect_uri_used: redirectUri,
+                        app_id_used: appId,
+                    },
+                },
                 { status: 400 }
             );
         }
@@ -128,6 +135,10 @@ export async function POST(request: NextRequest) {
             waba_id,
             phone_number_id,
             token_type,
+            debug: {
+                redirect_uri_used: redirectUri,
+                app_id_used: appId,
+            },
             // Never return the raw access_token to the client in production!
             // Return only metadata.
             message: 'WhatsApp Business Account connected successfully.',

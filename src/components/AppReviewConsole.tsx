@@ -277,6 +277,29 @@ export function AppReviewConsole() {
                                     </div>
                                 )}
 
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Frontend redirect URI</div>
+                                        <div className="mt-1 break-all font-medium text-zinc-200">{signupDebug.frontendRedirectUriUsed ?? 'N/A'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Backend redirect URI</div>
+                                        <div className="mt-1 break-all font-medium text-zinc-200">{signupDebug.backendRedirectUriUsed ?? 'N/A'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Frontend App ID</div>
+                                        <div className="mt-1 break-all font-medium text-zinc-200">{signupDebug.frontendAppIdUsed ?? 'N/A'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Backend App ID</div>
+                                        <div className="mt-1 break-all font-medium text-zinc-200">{signupDebug.backendAppIdUsed ?? 'N/A'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 md:col-span-2">
+                                        <div className="text-xs uppercase text-zinc-500">Frontend Config ID</div>
+                                        <div className="mt-1 break-all font-medium text-zinc-200">{signupDebug.frontendConfigIdUsed ?? 'N/A'}</div>
+                                    </div>
+                                </div>
+
                                 {signupDebug.lastError && (
                                     <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
                                         <div className="text-xs uppercase text-red-300">Last error</div>
