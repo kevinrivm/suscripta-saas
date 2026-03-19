@@ -301,7 +301,7 @@ export function AppReviewConsole() {
                                 className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
                             />
                             <p className="mt-2 text-xs text-zinc-500">
-                                Meta expects lowercase names with underscores.
+                                Meta expects lowercase names with underscores. Example: <code className="font-mono">payment_reminder_review_v2</code>.
                             </p>
                         </div>
 
@@ -337,6 +337,9 @@ export function AppReviewConsole() {
                                 rows={5}
                                 className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
                             />
+                            <p className="mt-2 text-xs text-zinc-500">
+                                Meta-safe rules: use sequential variables like <code className="font-mono">{'{{1}}'}</code>, avoid placing a variable at the very start or end, and do not place variables directly next to each other.
+                            </p>
                         </div>
 
                         <button

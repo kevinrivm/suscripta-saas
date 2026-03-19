@@ -36,6 +36,10 @@ interface CreateTemplateInput {
     bodyText: string;
 }
 
+function hasValidTemplateLanguage(language: string) {
+    return /^[a-z]{2}(?:_[A-Z]{2})?$/.test(language.trim());
+}
+
 function buildTemplateBodyExample(bodyText: string) {
     const matches = [...bodyText.matchAll(/\{\{(\d+)\}\}/g)];
 
@@ -72,6 +76,23 @@ function buildTemplateBodyExample(bodyText: string) {
 function hasLeadingOrTrailingTemplateVariable(bodyText: string) {
     const trimmed = bodyText.trim();
     return /^\{\{\d+\}\}/.test(trimmed) || /\{\{\d+\}\}$/.test(trimmed);
+}
+
+function hasAdjacentTemplateVariables(bodyText: string) {
+    return /\}\}\s*\{\{/.test(bodyText);
+}
+
+function hasSequentialTemplateVariables(bodyText: string) {
+    const indexes = [...bodyText.matchAll(/\{\{(\d+)\}\}/g)]
+        .map((match) => Number(match[1]))
+        .filter((value) => Number.isFinite(value));
+
+    if (!indexes.length) {
+        return true;
+    }
+
+    const uniqueIndexes = [...new Set(indexes)].sort((left, right) => left - right);
+    return uniqueIndexes.every((value, index) => value === index + 1);
 }
 
 async function getStoredConnection(): Promise<StoredWhatsAppConnection | null> {
@@ -229,6 +250,13 @@ export async function createWhatsAppTemplate(input: CreateTemplateInput) {
             };
         }
 
+        if (!hasValidTemplateLanguage(input.language)) {
+            return {
+                ok: false as const,
+                error: 'Use a valid Meta language code such as en_US or es_MX.',
+            };
+        }
+
         if (!input.bodyText.trim()) {
             return {
                 ok: false as const,
@@ -240,6 +268,20 @@ export async function createWhatsAppTemplate(input: CreateTemplateInput) {
             return {
                 ok: false as const,
                 error: 'Template variables cannot appear at the very start or end of the message body. Add regular text before the first variable and after the last one.',
+            };
+        }
+
+        if (hasAdjacentTemplateVariables(input.bodyText)) {
+            return {
+                ok: false as const,
+                error: 'Template variables cannot be adjacent. Add normal text or punctuation between placeholders.',
+            };
+        }
+
+        if (!hasSequentialTemplateVariables(input.bodyText)) {
+            return {
+                ok: false as const,
+                error: 'Template variables must be sequential and start at {{1}}.',
             };
         }
 
