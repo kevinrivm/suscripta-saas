@@ -56,9 +56,6 @@ export interface EmbeddedSignupDebugState {
 
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
 const FACEBOOK_CONFIG_ID = process.env.NEXT_PUBLIC_FACEBOOK_CONFIG_ID;
-const REDIRECT_URI =
-    process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI ??
-    'https://suscripta-dev.aishiagency.tech/oauth/callback';
 const EMBEDDED_SIGNUP_SESSION_KEY = 'suscripta_embedded_signup';
 
 interface EmbeddedSignupButtonProps {
@@ -83,7 +80,7 @@ const INITIAL_DEBUG_STATE: EmbeddedSignupDebugState = {
     lastBackendMessage: null,
     backendRedirectUriUsed: null,
     backendAppIdUsed: null,
-    frontendRedirectUriUsed: REDIRECT_URI,
+    frontendRedirectUriUsed: null,
     frontendConfigIdUsed: FACEBOOK_CONFIG_ID ?? null,
     frontendAppIdUsed: FACEBOOK_APP_ID ?? null,
 };
@@ -335,7 +332,7 @@ export function EmbeddedSignupButton({ onSuccess, onError, onDebugChange }: Embe
             ...INITIAL_DEBUG_STATE,
             sdkLoaded: true,
             launchStarted: true,
-            frontendRedirectUriUsed: REDIRECT_URI,
+            frontendRedirectUriUsed: null,
             frontendConfigIdUsed: FACEBOOK_CONFIG_ID ?? null,
             frontendAppIdUsed: FACEBOOK_APP_ID ?? null,
         });
@@ -379,10 +376,9 @@ export function EmbeddedSignupButton({ onSuccess, onError, onDebugChange }: Embe
                 config_id: FACEBOOK_CONFIG_ID,
                 response_type: 'code',
                 override_default_response_type: true,
-                redirect_uri: REDIRECT_URI,
                 extras: {
                     setup: {},
-                    featureType: 'coexistence',
+                    featureType: 'whatsapp_business_app_onboarding',
                     sessionInfoVersion: '3',
                 },
             }

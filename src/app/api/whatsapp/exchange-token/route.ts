@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         const appSecret = process.env.FACEBOOK_APP_SECRET;
         const redirectUri = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI;
 
-        if (!appId || !appSecret || !redirectUri) {
+        if (!appId || !appSecret) {
             console.error('[Suscripta] Missing env vars:', { appId: !!appId, appSecret: !!appSecret, redirectUri: !!redirectUri });
             return NextResponse.json(
                 { error: 'Server configuration error: missing environment variables.' },
@@ -46,7 +46,9 @@ export async function POST(request: NextRequest) {
         tokenUrl.searchParams.set('client_id', appId);
         tokenUrl.searchParams.set('client_secret', appSecret);
         tokenUrl.searchParams.set('code', code);
-        tokenUrl.searchParams.set('redirect_uri', redirectUri);
+        if (redirectUri) {
+            tokenUrl.searchParams.set('redirect_uri', redirectUri);
+        }
 
         const tokenResponse = await fetch(tokenUrl.toString(), { method: 'GET' });
         const tokenData = await tokenResponse.json();
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
                 {
                     error: `Meta token exchange failed: ${tokenData.error.message}`,
                     debug: {
-                        redirect_uri_used: redirectUri,
+                        redirect_uri_used: redirectUri ?? null,
                         app_id_used: appId,
                     },
                 },
@@ -136,7 +138,7 @@ export async function POST(request: NextRequest) {
             phone_number_id,
             token_type,
             debug: {
-                redirect_uri_used: redirectUri,
+                redirect_uri_used: redirectUri ?? null,
                 app_id_used: appId,
             },
             // Never return the raw access_token to the client in production!
