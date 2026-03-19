@@ -27,6 +27,12 @@ interface EmbeddedSignupData {
     type?: string;
 }
 
+interface PendingSignupState {
+    code?: string;
+    wabaId?: string;
+    phoneNumberId?: string;
+}
+
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
 const FACEBOOK_CONFIG_ID = process.env.NEXT_PUBLIC_FACEBOOK_CONFIG_ID;
 const REDIRECT_URI =
@@ -44,6 +50,8 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
     const [isLoading, setIsLoading] = useState(false);
     const onSuccessRef = useRef(onSuccess);
     const onErrorRef = useRef(onError);
+    const pendingSignupRef = useRef<PendingSignupState>({});
+    const exchangeInFlightRef = useRef(false);
 
     useEffect(() => {
         onSuccessRef.current = onSuccess;
@@ -52,6 +60,66 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
     useEffect(() => {
         onErrorRef.current = onError;
     }, [onError]);
+
+    const exchangeCodeForConnection = useCallback(async (payload: Required<PendingSignupState>) => {
+        if (exchangeInFlightRef.current) {
+            return;
+        }
+
+        exchangeInFlightRef.current = true;
+
+        try {
+            const response = await fetch('/api/whatsapp/exchange-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    code: payload.code,
+                    waba_id: payload.wabaId,
+                    phone_number_id: payload.phoneNumberId,
+                }),
+            });
+
+            const result = await response.json();
+
+            if (!response.ok || result.error) {
+                throw new Error(result.error ?? 'Unknown Meta token exchange error.');
+            }
+
+            sessionStorage.setItem(
+                EMBEDDED_SIGNUP_SESSION_KEY,
+                JSON.stringify({
+                    ...payload,
+                    exchangedAt: new Date().toISOString(),
+                })
+            );
+
+            onSuccessRef.current?.(payload.wabaId, payload.phoneNumberId);
+        } catch (error) {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'The business number was linked in Meta, but Suscripta could not save the connection.';
+
+            onErrorRef.current?.(message);
+        } finally {
+            exchangeInFlightRef.current = false;
+            setIsLoading(false);
+        }
+    }, []);
+
+    const flushPendingSignup = useCallback(() => {
+        const { code, wabaId, phoneNumberId } = pendingSignupRef.current;
+
+        if (!code || !wabaId || !phoneNumberId) {
+            return;
+        }
+
+        void exchangeCodeForConnection({
+            code,
+            wabaId,
+            phoneNumberId,
+        });
+    }, [exchangeCodeForConnection]);
 
     useEffect(() => {
         const handleMessage = (event: MessageEvent) => {
@@ -67,18 +135,22 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                     const phoneNumberId = data.data?.phone_number_id ?? '';
 
                     if (wabaId && phoneNumberId) {
+                        pendingSignupRef.current = {
+                            ...pendingSignupRef.current,
+                            wabaId,
+                            phoneNumberId,
+                        };
+
                         sessionStorage.setItem(
                             EMBEDDED_SIGNUP_SESSION_KEY,
                             JSON.stringify({
-                                wabaId,
-                                phoneNumberId,
+                                ...pendingSignupRef.current,
                                 capturedAt: new Date().toISOString(),
                             })
                         );
-                        onSuccessRef.current?.(wabaId, phoneNumberId);
-                    }
 
-                    setIsLoading(false);
+                        flushPendingSignup();
+                    }
                 }
             } catch {
                 // Ignore non-JSON messages coming from the popup.
@@ -87,7 +159,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
 
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
-    }, []);
+    }, [flushPendingSignup]);
 
     useEffect(() => {
         if (!FACEBOOK_APP_ID) {
@@ -152,20 +224,26 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
             return;
         }
 
+        pendingSignupRef.current = {};
         setIsLoading(true);
 
         window.FB.login(
             (response: FBLoginResponse) => {
                 if (response.authResponse?.code) {
-                    console.log('[Suscripta] Auth code received via callback:', response.authResponse.code);
+                    pendingSignupRef.current = {
+                        ...pendingSignupRef.current,
+                        code: response.authResponse.code,
+                    };
+
                     sessionStorage.setItem(
                         EMBEDDED_SIGNUP_SESSION_KEY,
                         JSON.stringify({
-                            ...(JSON.parse(sessionStorage.getItem(EMBEDDED_SIGNUP_SESSION_KEY) ?? '{}')),
-                            authCodeSeen: true,
+                            ...pendingSignupRef.current,
                             updatedAt: new Date().toISOString(),
                         })
                     );
+
+                    flushPendingSignup();
                 } else {
                     setIsLoading(false);
 
@@ -188,7 +266,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                 },
             }
         );
-    }, [sdkLoaded]);
+    }, [flushPendingSignup, sdkLoaded]);
 
     const notConfigured = !FACEBOOK_APP_ID || !FACEBOOK_CONFIG_ID;
 
@@ -211,7 +289,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                         </svg>
-                        Opening Meta...
+                        Saving connection...
                     </>
                 ) : !sdkLoaded && !notConfigured ? (
                     <>
