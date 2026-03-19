@@ -36,6 +36,39 @@ interface CreateTemplateInput {
     bodyText: string;
 }
 
+function buildTemplateBodyExample(bodyText: string) {
+    const matches = [...bodyText.matchAll(/\{\{(\d+)\}\}/g)];
+
+    if (!matches.length) {
+        return undefined;
+    }
+
+    const highestIndex = matches.reduce((max, match) => {
+        const value = Number(match[1]);
+        return Number.isFinite(value) ? Math.max(max, value) : max;
+    }, 0);
+
+    if (!highestIndex) {
+        return undefined;
+    }
+
+    const sampleValues = Array.from({ length: highestIndex }, (_, index) => {
+        const fallbackExamples = [
+            'Kevin',
+            '3',
+            'https://suscripta.co/pay',
+            'March 25',
+            '$49.00',
+        ];
+
+        return fallbackExamples[index] ?? `sample_${index + 1}`;
+    });
+
+    return {
+        body_text: [sampleValues],
+    };
+}
+
 async function getStoredConnection(): Promise<StoredWhatsAppConnection | null> {
     const supabaseUser = await createClient();
     const {
@@ -168,57 +201,77 @@ export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {
 }
 
 export async function createWhatsAppTemplate(input: CreateTemplateInput) {
-    const connection = await getStoredConnection();
+    try {
+        const connection = await getStoredConnection();
 
-    if (!connection) {
-        throw new Error('No active WhatsApp connection found.');
-    }
-
-    const normalizedName = input.name
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, '_')
-        .replace(/[^a-z0-9_]/g, '');
-
-    if (!normalizedName) {
-        throw new Error('Enter a valid template name using letters, numbers, or underscores.');
-    }
-
-    if (!input.bodyText.trim()) {
-        throw new Error('Template body text is required.');
-    }
-
-    const result = await metaGraphRequest<{
-        id?: string;
-        status?: string;
-        category?: string;
-    }>(
-        `/${connection.waba_id}/message_templates`,
-        connection.access_token,
-        {
-            method: 'POST',
-            body: JSON.stringify({
-                name: normalizedName,
-                language: input.language,
-                category: input.category,
-                allow_category_change: true,
-                components: [
-                    {
-                        type: 'BODY',
-                        text: input.bodyText.trim(),
-                    },
-                ],
-            }),
+        if (!connection) {
+            return {
+                ok: false as const,
+                error: 'No active WhatsApp connection found.',
+            };
         }
-    );
 
-    return {
-        id: result.id ?? null,
-        status: result.status ?? 'PENDING',
-        category: result.category ?? input.category,
-        name: normalizedName,
-        language: input.language,
-    };
+        const normalizedName = input.name
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '_')
+            .replace(/[^a-z0-9_]/g, '');
+
+        if (!normalizedName) {
+            return {
+                ok: false as const,
+                error: 'Enter a valid template name using letters, numbers, or underscores.',
+            };
+        }
+
+        if (!input.bodyText.trim()) {
+            return {
+                ok: false as const,
+                error: 'Template body text is required.',
+            };
+        }
+
+        const bodyExample = buildTemplateBodyExample(input.bodyText.trim());
+
+        const result = await metaGraphRequest<{
+            id?: string;
+            status?: string;
+            category?: string;
+        }>(
+            `/${connection.waba_id}/message_templates`,
+            connection.access_token,
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: normalizedName,
+                    language: input.language,
+                    category: input.category,
+                    allow_category_change: true,
+                    components: [
+                        {
+                            type: 'BODY',
+                            text: input.bodyText.trim(),
+                            ...(bodyExample ? { example: bodyExample } : {}),
+                        },
+                    ],
+                }),
+            }
+        );
+
+        return {
+            ok: true as const,
+            id: result.id ?? null,
+            status: result.status ?? 'PENDING',
+            category: result.category ?? input.category,
+            name: normalizedName,
+            language: input.language,
+        };
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: error instanceof Error ? error.message : 'Template creation failed.',
+        };
+    }
 }
 
 export async function disconnectWhatsApp() {

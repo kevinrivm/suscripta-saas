@@ -120,6 +120,11 @@ export function AppReviewConsole() {
                 bodyText: newTemplateBody,
             });
 
+            if (!result.ok) {
+                setError(result.error);
+                return;
+            }
+
             setTemplateResult(
                 `Template ${result.name} submitted to Meta with status ${result.status}. Refresh the template list until it becomes APPROVED.`
             );
