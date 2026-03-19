@@ -33,6 +33,22 @@ interface PendingSignupState {
     phoneNumberId?: string;
 }
 
+export interface EmbeddedSignupDebugState {
+    sdkLoaded: boolean;
+    launchStarted: boolean;
+    authCodeReceived: boolean;
+    wabaIdReceived: boolean;
+    phoneNumberIdReceived: boolean;
+    exchangeRequested: boolean;
+    exchangeCompleted: boolean;
+    lastError: string | null;
+    codePreview: string | null;
+    wabaId: string | null;
+    phoneNumberId: string | null;
+    lastBackendStatus: number | null;
+    lastBackendMessage: string | null;
+}
+
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
 const FACEBOOK_CONFIG_ID = process.env.NEXT_PUBLIC_FACEBOOK_CONFIG_ID;
 const REDIRECT_URI =
@@ -43,13 +59,36 @@ const EMBEDDED_SIGNUP_SESSION_KEY = 'suscripta_embedded_signup';
 interface EmbeddedSignupButtonProps {
     onSuccess?: (wabaId: string, phoneNumberId: string) => void;
     onError?: (error: string) => void;
+    onDebugChange?: (debug: EmbeddedSignupDebugState) => void;
 }
 
-export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButtonProps) {
+const INITIAL_DEBUG_STATE: EmbeddedSignupDebugState = {
+    sdkLoaded: false,
+    launchStarted: false,
+    authCodeReceived: false,
+    wabaIdReceived: false,
+    phoneNumberIdReceived: false,
+    exchangeRequested: false,
+    exchangeCompleted: false,
+    lastError: null,
+    codePreview: null,
+    wabaId: null,
+    phoneNumberId: null,
+    lastBackendStatus: null,
+    lastBackendMessage: null,
+};
+
+export function EmbeddedSignupButton({ onSuccess, onError, onDebugChange }: EmbeddedSignupButtonProps) {
     const [sdkLoaded, setSdkLoaded] = useState(() => typeof window !== 'undefined' && !!window.FB);
     const [isLoading, setIsLoading] = useState(false);
+    const [, setDebugState] = useState<EmbeddedSignupDebugState>({
+        ...INITIAL_DEBUG_STATE,
+        sdkLoaded: typeof window !== 'undefined' && !!window.FB,
+    });
+
     const onSuccessRef = useRef(onSuccess);
     const onErrorRef = useRef(onError);
+    const onDebugChangeRef = useRef(onDebugChange);
     const pendingSignupRef = useRef<PendingSignupState>({});
     const exchangeInFlightRef = useRef(false);
 
@@ -61,12 +100,30 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
         onErrorRef.current = onError;
     }, [onError]);
 
+    useEffect(() => {
+        onDebugChangeRef.current = onDebugChange;
+    }, [onDebugChange]);
+
+    const updateDebugState = useCallback((patch: Partial<EmbeddedSignupDebugState>) => {
+        setDebugState((current) => {
+            const next = { ...current, ...patch };
+            onDebugChangeRef.current?.(next);
+            return next;
+        });
+    }, []);
+
     const exchangeCodeForConnection = useCallback(async (payload: Required<PendingSignupState>) => {
         if (exchangeInFlightRef.current) {
             return;
         }
 
         exchangeInFlightRef.current = true;
+        updateDebugState({
+            exchangeRequested: true,
+            lastError: null,
+            lastBackendStatus: null,
+            lastBackendMessage: null,
+        });
 
         try {
             const response = await fetch('/api/whatsapp/exchange-token', {
@@ -82,6 +139,10 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
             const result = await response.json();
 
             if (!response.ok || result.error) {
+                updateDebugState({
+                    lastBackendStatus: response.status,
+                    lastBackendMessage: result.error ?? 'Unknown Meta token exchange error.',
+                });
                 throw new Error(result.error ?? 'Unknown Meta token exchange error.');
             }
 
@@ -93,6 +154,12 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                 })
             );
 
+            updateDebugState({
+                exchangeCompleted: true,
+                lastBackendStatus: response.status,
+                lastBackendMessage: result.message ?? 'Connection saved successfully.',
+            });
+
             onSuccessRef.current?.(payload.wabaId, payload.phoneNumberId);
         } catch (error) {
             const message =
@@ -100,12 +167,15 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                     ? error.message
                     : 'The business number was linked in Meta, but Suscripta could not save the connection.';
 
+            updateDebugState({
+                lastError: message,
+            });
             onErrorRef.current?.(message);
         } finally {
             exchangeInFlightRef.current = false;
             setIsLoading(false);
         }
-    }, []);
+    }, [updateDebugState]);
 
     const flushPendingSignup = useCallback(() => {
         const { code, wabaId, phoneNumberId } = pendingSignupRef.current;
@@ -141,6 +211,13 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                             phoneNumberId,
                         };
 
+                        updateDebugState({
+                            wabaIdReceived: true,
+                            phoneNumberIdReceived: true,
+                            wabaId,
+                            phoneNumberId,
+                        });
+
                         sessionStorage.setItem(
                             EMBEDDED_SIGNUP_SESSION_KEY,
                             JSON.stringify({
@@ -159,20 +236,25 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
 
         window.addEventListener('message', handleMessage);
         return () => window.removeEventListener('message', handleMessage);
-    }, [flushPendingSignup]);
+    }, [flushPendingSignup, updateDebugState]);
 
     useEffect(() => {
         if (!FACEBOOK_APP_ID) {
-            console.warn('[Suscripta] NEXT_PUBLIC_FACEBOOK_APP_ID is not configured. Embedded Signup will not work.');
+            const message = 'NEXT_PUBLIC_FACEBOOK_APP_ID is not configured. Embedded Signup will not work.';
+            console.warn(`[Suscripta] ${message}`);
+            updateDebugState({ lastError: message });
             return;
         }
 
         if (!FACEBOOK_CONFIG_ID) {
-            console.warn('[Suscripta] NEXT_PUBLIC_FACEBOOK_CONFIG_ID is not configured. Embedded Signup will not work.');
+            const message = 'NEXT_PUBLIC_FACEBOOK_CONFIG_ID is not configured. Embedded Signup will not work.';
+            console.warn(`[Suscripta] ${message}`);
+            updateDebugState({ lastError: message });
             return;
         }
 
         if (window.FB) {
+            updateDebugState({ sdkLoaded: true });
             return;
         }
 
@@ -180,6 +262,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
             const interval = setInterval(() => {
                 if (window.FB) {
                     setSdkLoaded(true);
+                    updateDebugState({ sdkLoaded: true });
                     clearInterval(interval);
                 }
             }, 100);
@@ -195,6 +278,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                 version: 'v22.0',
             });
             setSdkLoaded(true);
+            updateDebugState({ sdkLoaded: true });
         };
 
         const script = document.createElement('script');
@@ -203,28 +287,41 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
         script.async = true;
         script.defer = true;
         script.onerror = () => {
-            onErrorRef.current?.('Could not load the Facebook SDK. Check your network connection and try again.');
+            const message = 'Could not load the Facebook SDK. Check your network connection and try again.';
+            updateDebugState({ lastError: message });
+            onErrorRef.current?.(message);
         };
         document.body.appendChild(script);
-    }, []);
+    }, [updateDebugState]);
 
     const launchEmbeddedSignup = useCallback(() => {
         if (!FACEBOOK_APP_ID) {
-            onErrorRef.current?.('Missing configuration: NEXT_PUBLIC_FACEBOOK_APP_ID is not defined.');
+            const message = 'Missing configuration: NEXT_PUBLIC_FACEBOOK_APP_ID is not defined.';
+            updateDebugState({ lastError: message });
+            onErrorRef.current?.(message);
             return;
         }
 
         if (!FACEBOOK_CONFIG_ID) {
-            onErrorRef.current?.('Missing configuration: NEXT_PUBLIC_FACEBOOK_CONFIG_ID is not defined.');
+            const message = 'Missing configuration: NEXT_PUBLIC_FACEBOOK_CONFIG_ID is not defined.';
+            updateDebugState({ lastError: message });
+            onErrorRef.current?.(message);
             return;
         }
 
         if (!sdkLoaded || !window.FB) {
-            onErrorRef.current?.('The Facebook SDK is still loading. Wait a moment and try again.');
+            const message = 'The Facebook SDK is still loading. Wait a moment and try again.';
+            updateDebugState({ lastError: message });
+            onErrorRef.current?.(message);
             return;
         }
 
         pendingSignupRef.current = {};
+        updateDebugState({
+            ...INITIAL_DEBUG_STATE,
+            sdkLoaded: true,
+            launchStarted: true,
+        });
         setIsLoading(true);
 
         window.FB.login(
@@ -234,6 +331,11 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                         ...pendingSignupRef.current,
                         code: response.authResponse.code,
                     };
+
+                    updateDebugState({
+                        authCodeReceived: true,
+                        codePreview: `${response.authResponse.code.substring(0, 24)}...`,
+                    });
 
                     sessionStorage.setItem(
                         EMBEDDED_SIGNUP_SESSION_KEY,
@@ -247,11 +349,13 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                 } else {
                     setIsLoading(false);
 
-                    if (response.status === 'unknown' || !response.authResponse) {
-                        onErrorRef.current?.('The Meta authorization flow was cancelled.');
-                    } else {
-                        onErrorRef.current?.('The business number could not be linked. Verify access in Meta Business Manager.');
-                    }
+                    const message =
+                        response.status === 'unknown' || !response.authResponse
+                            ? 'The Meta authorization flow was cancelled.'
+                            : 'The business number could not be linked. Verify access in Meta Business Manager.';
+
+                    updateDebugState({ lastError: message });
+                    onErrorRef.current?.(message);
                 }
             },
             {
@@ -266,7 +370,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                 },
             }
         );
-    }, [flushPendingSignup, sdkLoaded]);
+    }, [flushPendingSignup, sdkLoaded, updateDebugState]);
 
     const notConfigured = !FACEBOOK_APP_ID || !FACEBOOK_CONFIG_ID;
 

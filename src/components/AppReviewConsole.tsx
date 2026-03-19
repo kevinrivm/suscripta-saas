@@ -1,7 +1,7 @@
 'use client';
 
 import { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
-import { EmbeddedSignupButton } from '@/components/EmbeddedSignupButton';
+import { EmbeddedSignupButton, type EmbeddedSignupDebugState } from '@/components/EmbeddedSignupButton';
 import {
     createWhatsAppTemplate,
     getWhatsAppReviewBundle,
@@ -66,6 +66,7 @@ export function AppReviewConsole() {
     const [newTemplateLanguage, setNewTemplateLanguage] = useState('en_US');
     const [newTemplateCategory, setNewTemplateCategory] = useState<'UTILITY' | 'MARKETING' | 'AUTHENTICATION'>('UTILITY');
     const [newTemplateBody, setNewTemplateBody] = useState('Hello {{1}}, this is a payment reminder from Suscripta. Your subscription renews in {{2}} days. Complete payment here: {{3}}');
+    const [signupDebug, setSignupDebug] = useState<EmbeddedSignupDebugState | null>(null);
 
     const approvedTemplates = useMemo(
         () => bundle.templates.filter((template) => template.status.toUpperCase() === 'APPROVED'),
@@ -205,6 +206,7 @@ export function AppReviewConsole() {
                         <EmbeddedSignupButton
                             onSuccess={handleEmbeddedSignupSuccess}
                             onError={setError}
+                            onDebugChange={setSignupDebug}
                         />
                     </div>
 
@@ -223,6 +225,70 @@ export function AppReviewConsole() {
                                 and show the final WhatsApp delivery on the recipient device.
                             </p>
                         </div>
+                    </div>
+
+                    <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-5">
+                        <div className="flex items-center justify-between gap-4">
+                            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">Runtime debug</p>
+                            <span className="text-xs text-zinc-500">Visible only for troubleshooting</span>
+                        </div>
+
+                        {signupDebug ? (
+                            <div className="mt-4 space-y-3 text-sm text-zinc-300">
+                                <div className="grid gap-3 md:grid-cols-2">
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">SDK loaded</div>
+                                        <div className="mt-1 font-medium">{signupDebug.sdkLoaded ? 'Yes' : 'No'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Launch started</div>
+                                        <div className="mt-1 font-medium">{signupDebug.launchStarted ? 'Yes' : 'No'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Auth code received</div>
+                                        <div className="mt-1 font-medium">{signupDebug.authCodeReceived ? signupDebug.codePreview ?? 'Yes' : 'No'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">WABA ID received</div>
+                                        <div className="mt-1 font-medium">{signupDebug.wabaIdReceived ? signupDebug.wabaId ?? 'Yes' : 'No'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Phone number ID received</div>
+                                        <div className="mt-1 font-medium">{signupDebug.phoneNumberIdReceived ? signupDebug.phoneNumberId ?? 'Yes' : 'No'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Backend exchange requested</div>
+                                        <div className="mt-1 font-medium">{signupDebug.exchangeRequested ? 'Yes' : 'No'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Backend exchange completed</div>
+                                        <div className="mt-1 font-medium">{signupDebug.exchangeCompleted ? 'Yes' : 'No'}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-white/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Backend HTTP status</div>
+                                        <div className="mt-1 font-medium">{signupDebug.lastBackendStatus ?? 'N/A'}</div>
+                                    </div>
+                                </div>
+
+                                {signupDebug.lastBackendMessage && (
+                                    <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                        <div className="text-xs uppercase text-zinc-500">Backend message</div>
+                                        <div className="mt-1 break-words font-medium text-zinc-200">{signupDebug.lastBackendMessage}</div>
+                                    </div>
+                                )}
+
+                                {signupDebug.lastError && (
+                                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3">
+                                        <div className="text-xs uppercase text-red-300">Last error</div>
+                                        <div className="mt-1 break-words font-medium text-red-200">{signupDebug.lastError}</div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="mt-4 text-sm text-zinc-500">
+                                No signup attempt yet.
+                            </p>
+                        )}
                     </div>
                 </section>
 

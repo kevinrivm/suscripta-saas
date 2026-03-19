@@ -52,7 +52,11 @@ export async function POST(request: NextRequest) {
         const tokenData = await tokenResponse.json();
 
         if (tokenData.error) {
-            console.error('[Suscripta] Token exchange failed:', tokenData.error);
+            console.error('[Suscripta] Token exchange failed:', {
+                ...tokenData.error,
+                redirect_uri_used: redirectUri,
+                code_preview: String(code).substring(0, 24) + '...',
+            });
             return NextResponse.json(
                 { error: `Meta token exchange failed: ${tokenData.error.message}` },
                 { status: 400 }
@@ -116,6 +120,7 @@ export async function POST(request: NextRequest) {
             token_type,
             user_linked: !!userId,
             access_token_preview: access_token?.substring(0, 20) + '...',
+            redirect_uri_used: redirectUri,
         });
 
         return NextResponse.json({
