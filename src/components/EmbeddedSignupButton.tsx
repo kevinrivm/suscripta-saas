@@ -31,6 +31,7 @@ interface EmbeddedSignupData {
 const FACEBOOK_APP_ID = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
 const CONFIG_ID = '1585204056102996';
 const REDIRECT_URI = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI ?? 'https://suscripta-dev.aishiagency.tech/oauth/callback';
+const EMBEDDED_SIGNUP_SESSION_KEY = 'suscripta_embedded_signup';
 
 interface EmbeddedSignupButtonProps {
     onSuccess?: (wabaId: string, phoneNumberId: string) => void;
@@ -38,7 +39,7 @@ interface EmbeddedSignupButtonProps {
 }
 
 export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButtonProps) {
-    const [sdkLoaded, setSdkLoaded] = useState(false);
+    const [sdkLoaded, setSdkLoaded] = useState(() => typeof window !== 'undefined' && !!window.FB);
     const [isLoading, setIsLoading] = useState(false);
     const onSuccessRef = useRef(onSuccess);
     const onErrorRef = useRef(onError);
@@ -57,6 +58,14 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                     const wabaId = data.data?.waba_id ?? '';
                     const phoneNumberId = data.data?.phone_number_id ?? '';
                     if (wabaId && phoneNumberId) {
+                        sessionStorage.setItem(
+                            EMBEDDED_SIGNUP_SESSION_KEY,
+                            JSON.stringify({
+                                wabaId,
+                                phoneNumberId,
+                                capturedAt: new Date().toISOString(),
+                            })
+                        );
                         onSuccessRef.current?.(wabaId, phoneNumberId);
                     }
                     setIsLoading(false);
@@ -77,9 +86,7 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
             return;
         }
 
-        // If SDK is already loaded, just mark it ready
         if (window.FB) {
-            setSdkLoaded(true);
             return;
         }
 
@@ -134,6 +141,14 @@ export function EmbeddedSignupButton({ onSuccess, onError }: EmbeddedSignupButto
                 if (response.authResponse?.code) {
                     // Auth code received — Meta will also redirect to REDIRECT_URI with the code as a query param
                     console.log('[Suscripta] Auth code received via callback:', response.authResponse.code);
+                    sessionStorage.setItem(
+                        EMBEDDED_SIGNUP_SESSION_KEY,
+                        JSON.stringify({
+                            ...(JSON.parse(sessionStorage.getItem(EMBEDDED_SIGNUP_SESSION_KEY) ?? '{}')),
+                            authCodeSeen: true,
+                            updatedAt: new Date().toISOString(),
+                        })
+                    );
                     // The page will navigate to /oauth/callback automatically via the redirect_uri
                 } else {
                     setIsLoading(false);

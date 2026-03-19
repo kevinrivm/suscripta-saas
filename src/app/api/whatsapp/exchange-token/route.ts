@@ -20,6 +20,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Missing required parameter: code' }, { status: 400 });
         }
 
+        if (!waba_id || !phone_number_id) {
+            return NextResponse.json(
+                {
+                    error: 'Missing required WhatsApp asset identifiers. Repeat the Embedded Signup flow so Meta returns the WABA ID and Phone Number ID.',
+                },
+                { status: 400 }
+            );
+        }
+
         const appId = process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
         const appSecret = process.env.FACEBOOK_APP_SECRET;
         const redirectUri = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_URI;
@@ -75,7 +84,7 @@ export async function POST(request: NextRequest) {
         const supabaseUser = await createClient();
 
         // 1) Verify the user is authenticated (if using Supabase Auth later)
-        const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
+        const { data: { user } } = await supabaseUser.auth.getUser();
         const userId = user?.id || null;
 
         // 2) Upsert the connection data. We use the Admin Client because 

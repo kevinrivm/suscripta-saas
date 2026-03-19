@@ -73,7 +73,7 @@ export default function Campaigns() {
                             </svg>
                             Consejo de Meta API
                         </h3>
-                        <p className="text-xs text-indigo-200 leading-relaxed">Verifica el consentimiento de opt-in. Meta puede restringir el uso del "Embedded Signup" si tus usuarios bloquean frecuentemente tus automatizaciones de cobranza.</p>
+                        <p className="text-xs text-indigo-200 leading-relaxed">Verifica el consentimiento de opt-in. Meta puede restringir el uso del Embedded Signup si tus usuarios bloquean frecuentemente tus automatizaciones de cobranza.</p>
                     </div>
                 </div>
             </div>
