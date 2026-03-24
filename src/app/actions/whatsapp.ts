@@ -118,6 +118,42 @@ function hasSequentialTemplateVariables(bodyText: string) {
     return uniqueIndexes.every((value, index) => value === index + 1);
 }
 
+function shouldMarkConnectionInactive(message: string) {
+    const normalized = message.toLowerCase();
+
+    return (
+        normalized.includes('unsupported get request') ||
+        normalized.includes('does not exist') ||
+        normalized.includes('no longer exists') ||
+        normalized.includes('invalid oauth access token') ||
+        normalized.includes('session has expired') ||
+        normalized.includes('permission error')
+    );
+}
+
+async function markConnectionInactive(connectionId?: string) {
+    if (!connectionId) {
+        return;
+    }
+
+    try {
+        const supabaseAdmin = await createAdminClient();
+        const { error } = await supabaseAdmin
+            .from('whatsapp_connections')
+            .update({
+                is_active: false,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('id', connectionId);
+
+        if (error) {
+            console.warn('[Suscripta] Could not mark WhatsApp connection as inactive:', error.message);
+        }
+    } catch (error) {
+        console.warn('[Suscripta] Unexpected error marking WhatsApp connection inactive:', error);
+    }
+}
+
 async function getStoredConnection(): Promise<StoredWhatsAppConnection | null> {
     const supabaseUser = await createClient();
     const {
@@ -129,7 +165,10 @@ async function getStoredConnection(): Promise<StoredWhatsAppConnection | null> {
             .from('whatsapp_connections')
             .select('*')
             .eq('user_id', user.id)
-            .single();
+            .eq('is_active', true)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
 
         return (data as StoredWhatsAppConnection | null) ?? null;
     }
@@ -138,9 +177,10 @@ async function getStoredConnection(): Promise<StoredWhatsAppConnection | null> {
     const { data } = await supabaseAdmin
         .from('whatsapp_connections')
         .select('*')
+        .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
     return (data as StoredWhatsAppConnection | null) ?? null;
 }
@@ -174,28 +214,58 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
         };
     }
 
-    const [phoneProfile, templatesResponse, subscribedAppsResponse] = await Promise.all([
-        metaGraphRequest<WhatsAppPhoneProfile>(
-            `/${connection.phone_number_id}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,platform_type,throughput`,
-            connection.access_token
-        ),
-        metaGraphRequest<{ data?: WhatsAppTemplateSummary[] }>(
-            `/${connection.waba_id}/message_templates?fields=id,name,status,language,category,sub_category&limit=50`,
-            connection.access_token
-        ),
-        metaGraphRequest<{
-            data?: Array<{
-                whatsapp_business_api_data?: {
-                    id?: string;
-                    name?: string;
-                    link?: string;
-                };
-            }>;
-        }>(
-            `/${connection.waba_id}/subscribed_apps`,
-            connection.access_token
-        ),
-    ]);
+    let phoneProfile: WhatsAppPhoneProfile;
+    let templatesResponse: { data?: WhatsAppTemplateSummary[] };
+    let subscribedAppsResponse: {
+        data?: Array<{
+            whatsapp_business_api_data?: {
+                id?: string;
+                name?: string;
+                link?: string;
+            };
+        }>;
+    };
+
+    try {
+        [phoneProfile, templatesResponse, subscribedAppsResponse] = await Promise.all([
+            metaGraphRequest<WhatsAppPhoneProfile>(
+                `/${connection.phone_number_id}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,platform_type,throughput`,
+                connection.access_token
+            ),
+            metaGraphRequest<{ data?: WhatsAppTemplateSummary[] }>(
+                `/${connection.waba_id}/message_templates?fields=id,name,status,language,category,sub_category&limit=50`,
+                connection.access_token
+            ),
+            metaGraphRequest<{
+                data?: Array<{
+                    whatsapp_business_api_data?: {
+                        id?: string;
+                        name?: string;
+                        link?: string;
+                    };
+                }>;
+            }>(
+                `/${connection.waba_id}/subscribed_apps`,
+                connection.access_token
+            ),
+        ]);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown Meta validation error.';
+
+        if (shouldMarkConnectionInactive(message)) {
+            await markConnectionInactive(connection.id);
+
+            return {
+                connection: null,
+                phoneProfile: null,
+                templates: [],
+                subscribedApps: [],
+                recentMessageEvents: [],
+            };
+        }
+
+        throw error;
+    }
 
     const supabaseAdmin = await createAdminClient();
     const { data: recentMessageEventsData } = await supabaseAdmin
