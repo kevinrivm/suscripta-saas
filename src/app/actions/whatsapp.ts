@@ -2,6 +2,7 @@
 
 import { createAdminClient, createClient } from '@/utils/supabase/server';
 import {
+    buildRecipientPhoneCandidates,
     buildTemplateBodyComponents,
     metaGraphRequest,
     sanitizeRecipientPhone,
@@ -187,7 +188,9 @@ export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {
         }
 
         const recipientPhone = sanitizeRecipientPhone(input.recipientPhone);
-        if (!recipientPhone) {
+        const recipientCandidates = buildRecipientPhoneCandidates(input.recipientPhone);
+
+        if (!recipientPhone || !recipientCandidates.length) {
             return {
                 ok: false as const,
                 error: 'Enter a valid recipient phone in E.164 format.',
@@ -210,42 +213,55 @@ export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {
 
         const bodyComponents = buildTemplateBodyComponents(input.bodyParameters ?? []);
 
-        const payload = {
-            messaging_product: 'whatsapp',
-            recipient_type: 'individual',
-            to: recipientPhone,
-            type: 'template',
-            template: {
-                name: input.templateName,
-                language: {
-                    code: input.languageCode,
+        let lastError: Error | null = null;
+
+        for (const candidate of recipientCandidates) {
+            const payload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: candidate,
+                type: 'template',
+                template: {
+                    name: input.templateName,
+                    language: {
+                        code: input.languageCode,
+                    },
+                    ...(bodyComponents ? { components: bodyComponents } : {}),
                 },
-                ...(bodyComponents ? { components: bodyComponents } : {}),
-            },
-        };
+            };
 
-        const result = await metaGraphRequest<{
-            messages?: Array<{ id: string }>;
-            contacts?: Array<{ wa_id?: string; input?: string }>;
-        }>(
-            `/${connection.phone_number_id}/messages`,
-            connection.access_token,
-            {
-                method: 'POST',
-                body: JSON.stringify(payload),
+            try {
+                const result = await metaGraphRequest<{
+                    messages?: Array<{ id: string }>;
+                    contacts?: Array<{ wa_id?: string; input?: string }>;
+                }>(
+                    `/${connection.phone_number_id}/messages`,
+                    connection.access_token,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                    }
+                );
+
+                return {
+                    ok: true as const,
+                    messageId: result.messages?.[0]?.id ?? null,
+                    recipientWaId: result.contacts?.[0]?.wa_id ?? candidate,
+                    templateName: input.templateName,
+                };
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error('Meta message send failed.');
+                if (!lastError.message.includes('Account not registered')) {
+                    throw lastError;
+                }
             }
-        );
+        }
 
-        return {
-            ok: true as const,
-            messageId: result.messages?.[0]?.id ?? null,
-            recipientWaId: result.contacts?.[0]?.wa_id ?? recipientPhone,
-            templateName: input.templateName,
-        };
+        throw lastError ?? new Error('Meta message send failed.');
     } catch (error) {
         const message = error instanceof Error ? error.message : 'Meta message send failed.';
         const friendlyMessage = message.includes('Account not registered')
-            ? 'The recipient number is not registered on WhatsApp, or Meta cannot recognize it in the current format. Use a real WhatsApp number in E.164 format and verify that the recipient can receive WhatsApp messages.'
+            ? 'The recipient number could not be resolved by Meta, even after trying the supported phone formats for this country. Verify that the destination is a real WhatsApp account, that it can receive WhatsApp messages, and that your current sender environment is allowed to message it.'
             : message;
 
         return {

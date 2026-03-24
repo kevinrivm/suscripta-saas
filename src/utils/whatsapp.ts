@@ -48,6 +48,29 @@ export function sanitizeRecipientPhone(input: string) {
     return input.replace(/\D/g, "");
 }
 
+export function buildRecipientPhoneCandidates(input: string) {
+    const sanitized = sanitizeRecipientPhone(input);
+
+    if (!sanitized) {
+        return [];
+    }
+
+    const candidates = new Set<string>([sanitized]);
+
+    // Mexico-specific normalization:
+    // Some contact datasets store numbers as +52 1 XXX..., while others omit the
+    // mobile "1" and store them as +52 XXX.... Try both before failing.
+    if (sanitized.startsWith('521') && sanitized.length === 13) {
+        candidates.add(`52${sanitized.slice(3)}`);
+    }
+
+    if (sanitized.startsWith('52') && !sanitized.startsWith('521') && sanitized.length === 12) {
+        candidates.add(`521${sanitized.slice(2)}`);
+    }
+
+    return [...candidates];
+}
+
 export function buildTemplateBodyComponents(rawValues: string[]) {
     const parameters = rawValues
         .map((value) => value.trim())
