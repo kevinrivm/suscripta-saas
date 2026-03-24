@@ -21,6 +21,11 @@ interface ReviewBundle {
     } | null;
     phoneProfile: WhatsAppPhoneProfile | null;
     templates: WhatsAppTemplateSummary[];
+    subscribedApps: Array<{
+        id?: string;
+        name?: string;
+        link?: string;
+    }>;
 }
 
 interface SendTestTemplateInput {
@@ -147,16 +152,29 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
             connection: null,
             phoneProfile: null,
             templates: [],
+            subscribedApps: [],
         };
     }
 
-    const [phoneProfile, templatesResponse] = await Promise.all([
+    const [phoneProfile, templatesResponse, subscribedAppsResponse] = await Promise.all([
         metaGraphRequest<WhatsAppPhoneProfile>(
             `/${connection.phone_number_id}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,platform_type,throughput`,
             connection.access_token
         ),
         metaGraphRequest<{ data?: WhatsAppTemplateSummary[] }>(
             `/${connection.waba_id}/message_templates?fields=id,name,status,language,category,sub_category&limit=50`,
+            connection.access_token
+        ),
+        metaGraphRequest<{
+            data?: Array<{
+                whatsapp_business_api_data?: {
+                    id?: string;
+                    name?: string;
+                    link?: string;
+                };
+            }>;
+        }>(
+            `/${connection.waba_id}/subscribed_apps`,
             connection.access_token
         ),
     ]);
@@ -173,7 +191,42 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
         templates: (templatesResponse.data ?? []).sort((left, right) =>
             left.name.localeCompare(right.name)
         ),
+        subscribedApps: (subscribedAppsResponse.data ?? [])
+            .map((entry) => entry.whatsapp_business_api_data ?? {})
+            .filter((entry) => entry.id || entry.name || entry.link),
     };
+}
+
+export async function subscribeWhatsAppApp() {
+    try {
+        const connection = await getStoredConnection();
+
+        if (!connection) {
+            return {
+                ok: false as const,
+                error: 'No active WhatsApp connection found.',
+            };
+        }
+
+        const result = await metaGraphRequest<{ success?: boolean }>(
+            `/${connection.waba_id}/subscribed_apps`,
+            connection.access_token,
+            {
+                method: 'POST',
+            }
+        );
+
+        return {
+            ok: true as const,
+            success: result.success ?? true,
+            message: 'Meta app subscription enabled for the connected WhatsApp Business Account.',
+        };
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: error instanceof Error ? error.message : 'Could not subscribe the Meta app to this WABA.',
+        };
+    }
 }
 
 export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {

@@ -6,6 +6,7 @@ import {
     createWhatsAppTemplate,
     getWhatsAppReviewBundle,
     sendWhatsAppTestTemplate,
+    subscribeWhatsAppApp,
 } from '@/app/actions/whatsapp';
 
 interface ReviewConnection {
@@ -42,12 +43,18 @@ interface ReviewBundle {
     connection: ReviewConnection | null;
     phoneProfile: ReviewPhoneProfile | null;
     templates: ReviewTemplate[];
+    subscribedApps: Array<{
+        id?: string;
+        name?: string;
+        link?: string;
+    }>;
 }
 
 const EMPTY_REVIEW_BUNDLE: ReviewBundle = {
     connection: null,
     phoneProfile: null,
     templates: [],
+    subscribedApps: [],
 };
 
 export function AppReviewConsole() {
@@ -55,9 +62,11 @@ export function AppReviewConsole() {
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
     const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
+    const [isSubscribingApp, setIsSubscribingApp] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sendResult, setSendResult] = useState<string | null>(null);
     const [templateResult, setTemplateResult] = useState<string | null>(null);
+    const [subscriptionResult, setSubscriptionResult] = useState<string | null>(null);
     const [recipientPhone, setRecipientPhone] = useState('');
     const [templateName, setTemplateName] = useState('');
     const [languageCode, setLanguageCode] = useState('');
@@ -136,6 +145,28 @@ export function AppReviewConsole() {
             setError(err instanceof Error ? err.message : 'Template creation failed.');
         } finally {
             setIsCreatingTemplate(false);
+        }
+    };
+
+    const handleSubscribeApp = async () => {
+        setIsSubscribingApp(true);
+        setError(null);
+        setSubscriptionResult(null);
+
+        try {
+            const result = await subscribeWhatsAppApp();
+
+            if (!result.ok) {
+                setError(result.error);
+                return;
+            }
+
+            setSubscriptionResult(result.message);
+            await refreshBundle();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not subscribe the Meta app.');
+        } finally {
+            setIsSubscribingApp(false);
         }
     };
 
@@ -279,6 +310,43 @@ export function AppReviewConsole() {
                                     <span>Throughput level</span>
                                     <span>{bundle.phoneProfile?.throughput?.level ?? 'Unavailable'}</span>
                                 </div>
+                            </div>
+
+                            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <p className="text-sm font-medium text-white">Meta app subscription</p>
+                                        <p className="mt-1 text-xs text-zinc-500">
+                                            This matches the <code className="font-mono">POST /{'{waba_id}'}/subscribed_apps</code> step you already use in n8n.
+                                        </p>
+                                    </div>
+                                    <span className={`rounded-full px-3 py-1 text-xs ${bundle.subscribedApps.length ? 'bg-emerald-500/10 text-emerald-300' : 'bg-white/5 text-zinc-400'}`}>
+                                        {bundle.subscribedApps.length ? 'Subscribed' : 'Not subscribed'}
+                                    </span>
+                                </div>
+
+                                {bundle.subscribedApps.length ? (
+                                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-200">
+                                        Connected app: {bundle.subscribedApps[0].name ?? bundle.subscribedApps[0].id ?? 'Meta app'}
+                                    </div>
+                                ) : null}
+
+                                <button
+                                    type="button"
+                                    disabled={isSubscribingApp}
+                                    onClick={() => {
+                                        void handleSubscribeApp();
+                                    }}
+                                    className="mt-4 w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-500"
+                                >
+                                    {isSubscribingApp ? 'Subscribing app...' : 'Subscribe Meta app to this WABA'}
+                                </button>
+
+                                {subscriptionResult ? (
+                                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                                        {subscriptionResult}
+                                    </div>
+                                ) : null}
                             </div>
                         </div>
                     ) : (
