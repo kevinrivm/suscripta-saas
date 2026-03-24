@@ -42,6 +42,14 @@ interface CreateTemplateInput {
     bodyText: string;
 }
 
+interface RegisterPhoneInput {
+    cc: string;
+    phoneNumber: string;
+    cert: string;
+    pin: string;
+    method: 'sms' | 'voice';
+}
+
 function hasValidTemplateLanguage(language: string) {
     return /^[a-z]{2}(?:_[A-Z]{2})?$/.test(language.trim());
 }
@@ -225,6 +233,78 @@ export async function subscribeWhatsAppApp() {
         return {
             ok: false as const,
             error: error instanceof Error ? error.message : 'Could not subscribe the Meta app to this WABA.',
+        };
+    }
+}
+
+export async function registerWhatsAppPhoneNumber(input: RegisterPhoneInput) {
+    try {
+        const connection = await getStoredConnection();
+
+        if (!connection) {
+            return {
+                ok: false as const,
+                error: 'No active WhatsApp connection found.',
+            };
+        }
+
+        const cc = input.cc.replace(/\D/g, '');
+        const phoneNumber = input.phoneNumber.replace(/\D/g, '');
+        const pin = input.pin.replace(/\D/g, '');
+        const cert = input.cert.trim();
+
+        if (!cc) {
+            return {
+                ok: false as const,
+                error: 'Country code is required.',
+            };
+        }
+
+        if (!phoneNumber) {
+            return {
+                ok: false as const,
+                error: 'Local phone number is required.',
+            };
+        }
+
+        if (!cert) {
+            return {
+                ok: false as const,
+                error: 'Phone certificate is required.',
+            };
+        }
+
+        if (!pin || pin.length < 6) {
+            return {
+                ok: false as const,
+                error: 'Enter the 6-digit two-step verification PIN.',
+            };
+        }
+
+        await metaGraphRequest(
+            `/${connection.phone_number_id}/register`,
+            connection.access_token,
+            {
+                method: 'POST',
+                body: JSON.stringify({
+                    cc,
+                    phone_number: phoneNumber,
+                    method: input.method,
+                    cert,
+                    messaging_product: 'whatsapp',
+                    pin,
+                }),
+            }
+        );
+
+        return {
+            ok: true as const,
+            message: 'Phone number registration request sent successfully. Refresh the connection data to verify that the status changes from Pending.',
+        };
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: error instanceof Error ? error.message : 'Could not register the connected phone number.',
         };
     }
 }
