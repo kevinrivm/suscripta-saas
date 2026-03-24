@@ -63,3 +63,36 @@ EXECUTE FUNCTION update_updated_at_column();
 ALTER TABLE public.whatsapp_connections 
 ADD COLUMN IF NOT EXISTS display_phone_number TEXT,
 ADD COLUMN IF NOT EXISTS verified_name TEXT;
+
+-- ==========================================
+-- Tabla para estados de mensajes de WhatsApp
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.whatsapp_message_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    waba_id TEXT,
+    phone_number_id TEXT,
+    message_id TEXT NOT NULL UNIQUE,
+    recipient_phone TEXT,
+    template_name TEXT,
+    direction TEXT DEFAULT 'outbound',
+    status TEXT NOT NULL,
+    error_code TEXT,
+    error_title TEXT,
+    error_message TEXT,
+    raw_payload JSONB,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    last_event_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+ALTER TABLE public.whatsapp_message_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view whatsapp message events"
+ON public.whatsapp_message_events
+FOR SELECT
+USING (true);
+
+CREATE OR REPLACE TRIGGER update_whatsapp_message_events_updated_at
+BEFORE UPDATE ON public.whatsapp_message_events
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();

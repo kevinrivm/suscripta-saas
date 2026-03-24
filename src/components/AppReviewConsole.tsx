@@ -49,6 +49,15 @@ interface ReviewBundle {
         name?: string;
         link?: string;
     }>;
+    recentMessageEvents: Array<{
+        messageId: string;
+        recipientPhone?: string | null;
+        templateName?: string | null;
+        status: string;
+        errorCode?: string | null;
+        errorMessage?: string | null;
+        updatedAt?: string | null;
+    }>;
 }
 
 const EMPTY_REVIEW_BUNDLE: ReviewBundle = {
@@ -56,6 +65,7 @@ const EMPTY_REVIEW_BUNDLE: ReviewBundle = {
     phoneProfile: null,
     templates: [],
     subscribedApps: [],
+    recentMessageEvents: [],
 };
 
 function derivePhoneRegistrationDefaults(displayPhoneNumber?: string | null) {
@@ -722,6 +732,69 @@ export function AppReviewConsole() {
                             {sendResult}
                         </div>
                     )}
+                </section>
+
+                <section className="glass-panel rounded-2xl p-7 lg:col-span-2">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h2 className="text-xl font-semibold">5. Delivery status</h2>
+                            <p className="mt-2 text-sm text-zinc-400">
+                                The send API only confirms acceptance. Real delivery outcomes arrive later through WhatsApp webhooks.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                startTransition(() => {
+                                    void refreshBundle();
+                                });
+                            }}
+                            className="rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:border-white/20 hover:bg-white/5"
+                        >
+                            Refresh statuses
+                        </button>
+                    </div>
+
+                    <div className="mt-6 overflow-hidden rounded-2xl border border-white/10">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-black/40 text-xs uppercase text-zinc-500">
+                                <tr>
+                                    <th className="px-4 py-3">Status</th>
+                                    <th className="px-4 py-3">Recipient</th>
+                                    <th className="px-4 py-3">Template</th>
+                                    <th className="px-4 py-3">Message ID</th>
+                                    <th className="px-4 py-3">Last update</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5 bg-black/20">
+                                {bundle.recentMessageEvents.length ? (
+                                    bundle.recentMessageEvents.map((event) => (
+                                        <tr key={event.messageId}>
+                                            <td className="px-4 py-3">
+                                                <div className="font-medium text-white">{event.status}</div>
+                                                {event.errorMessage ? (
+                                                    <div className="mt-1 text-xs text-red-300">
+                                                        {event.errorCode ? `${event.errorCode}: ` : ''}
+                                                        {event.errorMessage}
+                                                    </div>
+                                                ) : null}
+                                            </td>
+                                            <td className="px-4 py-3 text-zinc-300">{event.recipientPhone ?? 'Unknown'}</td>
+                                            <td className="px-4 py-3 text-zinc-300">{event.templateName ?? 'Unknown'}</td>
+                                            <td className="px-4 py-3 text-xs text-zinc-500">{event.messageId}</td>
+                                            <td className="px-4 py-3 text-zinc-300">{event.updatedAt ? new Date(event.updatedAt).toLocaleString() : 'Unknown'}</td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td className="px-4 py-6 text-zinc-400" colSpan={5}>
+                                            No delivery events captured yet. Configure the webhook URL and verify token in Meta so this table can show delivered, read, or failed statuses.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
                 </section>
             </div>
 

@@ -26,6 +26,15 @@ interface ReviewBundle {
         name?: string;
         link?: string;
     }>;
+    recentMessageEvents: Array<{
+        messageId: string;
+        recipientPhone?: string | null;
+        templateName?: string | null;
+        status: string;
+        errorCode?: string | null;
+        errorMessage?: string | null;
+        updatedAt?: string | null;
+    }>;
 }
 
 interface SendTestTemplateInput {
@@ -161,6 +170,7 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
             phoneProfile: null,
             templates: [],
             subscribedApps: [],
+            recentMessageEvents: [],
         };
     }
 
@@ -187,6 +197,14 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
         ),
     ]);
 
+    const supabaseAdmin = await createAdminClient();
+    const { data: recentMessageEventsData } = await supabaseAdmin
+        .from('whatsapp_message_events')
+        .select('message_id,recipient_phone,template_name,status,error_code,error_message,updated_at')
+        .eq('phone_number_id', connection.phone_number_id)
+        .order('updated_at', { ascending: false })
+        .limit(10);
+
     return {
         connection: {
             wabaId: connection.waba_id,
@@ -202,7 +220,60 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
         subscribedApps: (subscribedAppsResponse.data ?? [])
             .map((entry) => entry.whatsapp_business_api_data ?? {})
             .filter((entry) => entry.id || entry.name || entry.link),
+        recentMessageEvents: (recentMessageEventsData ?? []).map((event) => ({
+            messageId: event.message_id,
+            recipientPhone: event.recipient_phone ?? null,
+            templateName: event.template_name ?? null,
+            status: event.status,
+            errorCode: event.error_code ?? null,
+            errorMessage: event.error_message ?? null,
+            updatedAt: event.updated_at ?? null,
+        })),
     };
+}
+
+async function upsertMessageEvent(event: {
+    wabaId?: string | null;
+    phoneNumberId?: string | null;
+    messageId: string;
+    recipientPhone?: string | null;
+    templateName?: string | null;
+    status: string;
+    errorCode?: string | null;
+    errorTitle?: string | null;
+    errorMessage?: string | null;
+    rawPayload?: unknown;
+    lastEventAt?: string;
+}) {
+    try {
+        const supabaseAdmin = await createAdminClient();
+        const { error } = await supabaseAdmin.from('whatsapp_message_events').upsert(
+            {
+                waba_id: event.wabaId ?? null,
+                phone_number_id: event.phoneNumberId ?? null,
+                message_id: event.messageId,
+                recipient_phone: event.recipientPhone ?? null,
+                template_name: event.templateName ?? null,
+                direction: 'outbound',
+                status: event.status,
+                error_code: event.errorCode ?? null,
+                error_title: event.errorTitle ?? null,
+                error_message: event.errorMessage ?? null,
+                raw_payload: event.rawPayload ?? null,
+                last_event_at: event.lastEventAt ?? new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+            {
+                onConflict: 'message_id',
+            }
+        );
+
+        if (error) {
+            console.warn('[Suscripta] Could not persist WhatsApp message event:', error.message);
+        }
+    } catch (error) {
+        console.warn('[Suscripta] Unexpected error persisting WhatsApp message event:', error);
+    }
 }
 
 export async function subscribeWhatsAppApp() {
@@ -376,10 +447,25 @@ export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {
                     }
                 );
 
+                const messageId = result.messages?.[0]?.id ?? null;
+                const resolvedRecipient = result.contacts?.[0]?.wa_id ?? candidate;
+
+                if (messageId) {
+                    await upsertMessageEvent({
+                        wabaId: connection.waba_id,
+                        phoneNumberId: connection.phone_number_id,
+                        messageId,
+                        recipientPhone: resolvedRecipient,
+                        templateName: input.templateName,
+                        status: 'accepted',
+                        rawPayload: payload,
+                    });
+                }
+
                 return {
                     ok: true as const,
-                    messageId: result.messages?.[0]?.id ?? null,
-                    recipientWaId: result.contacts?.[0]?.wa_id ?? candidate,
+                    messageId,
+                    recipientWaId: resolvedRecipient,
                     templateName: input.templateName,
                 };
             } catch (error) {

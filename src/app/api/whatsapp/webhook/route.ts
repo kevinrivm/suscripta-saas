@@ -1,0 +1,106 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient } from '@/utils/supabase/server';
+
+interface WebhookStatusError {
+    code?: number | string;
+    title?: string;
+    message?: string;
+}
+
+interface WebhookStatus {
+    id?: string;
+    recipient_id?: string;
+    status?: string;
+    timestamp?: string;
+    errors?: WebhookStatusError[];
+}
+
+interface WebhookChangeValue {
+    metadata?: {
+        phone_number_id?: string;
+    };
+    statuses?: WebhookStatus[];
+}
+
+interface WebhookChange {
+    field?: string;
+    value?: WebhookChangeValue;
+}
+
+interface WebhookEntry {
+    changes?: WebhookChange[];
+}
+
+interface WhatsAppWebhookPayload {
+    entry?: WebhookEntry[];
+}
+
+export async function GET(request: NextRequest) {
+    const searchParams = request.nextUrl.searchParams;
+    const mode = searchParams.get('hub.mode');
+    const token = searchParams.get('hub.verify_token');
+    const challenge = searchParams.get('hub.challenge');
+
+    if (
+        mode === 'subscribe' &&
+        token &&
+        token === process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN &&
+        challenge
+    ) {
+        return new NextResponse(challenge, { status: 200 });
+    }
+
+    return NextResponse.json({ error: 'Webhook verification failed.' }, { status: 403 });
+}
+
+export async function POST(request: NextRequest) {
+    try {
+        const payload = (await request.json()) as WhatsAppWebhookPayload;
+        const changes = payload.entry?.flatMap((entry) => entry.changes ?? []) ?? [];
+        const events = changes
+            .filter((change) => change.field === 'messages')
+            .flatMap((change) => {
+                const value = change?.value ?? {};
+                const metadata = value.metadata ?? {};
+
+                return (value.statuses ?? []).map((status) => {
+                    const firstError = status?.errors?.[0] ?? null;
+
+                    return {
+                        waba_id: null,
+                        phone_number_id: metadata.phone_number_id ?? null,
+                        message_id: status.id,
+                        recipient_phone: status.recipient_id ?? null,
+                        template_name: null,
+                        direction: 'outbound',
+                        status: status.status ?? 'unknown',
+                        error_code: firstError?.code ? String(firstError.code) : null,
+                        error_title: firstError?.title ?? null,
+                        error_message: firstError?.message ?? null,
+                        raw_payload: status,
+                        last_event_at: status.timestamp
+                            ? new Date(Number(status.timestamp) * 1000).toISOString()
+                            : new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    };
+                });
+            })
+            .filter((event) => event.message_id);
+
+        if (events.length) {
+            const supabaseAdmin = await createAdminClient();
+            const { error } = await supabaseAdmin
+                .from('whatsapp_message_events')
+                .upsert(events, { onConflict: 'message_id' });
+
+            if (error) {
+                console.error('[Suscripta] Could not persist WhatsApp webhook statuses:', error);
+            }
+        }
+
+        return NextResponse.json({ received: true });
+    } catch (error) {
+        console.error('[Suscripta] WhatsApp webhook error:', error);
+        return NextResponse.json({ error: 'Webhook processing failed.' }, { status: 500 });
+    }
+}
