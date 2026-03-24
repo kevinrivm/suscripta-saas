@@ -152,6 +152,11 @@ export function AppReviewConsole() {
                 bodyParameters: bodyParameters.split('\n'),
             });
 
+            if (!result.ok) {
+                setError(result.error);
+                return;
+            }
+
             setSendResult(
                 `Template ${result.templateName} sent successfully to ${result.recipientWaId}. Meta message ID: ${result.messageId ?? 'unavailable'}.`
             );
@@ -429,6 +434,9 @@ export function AppReviewConsole() {
                                 placeholder="+5215512345678"
                                 className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
                             />
+                            <p className="mt-2 text-xs text-zinc-500">
+                                Use a real WhatsApp recipient in E.164 format. Meta will reject numbers that are not registered on WhatsApp.
+                            </p>
                         </div>
 
                         <div>

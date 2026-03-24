@@ -176,54 +176,83 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
 }
 
 export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {
-    const connection = await getStoredConnection();
+    try {
+        const connection = await getStoredConnection();
 
-    if (!connection) {
-        throw new Error('No active WhatsApp connection found.');
-    }
-
-    const recipientPhone = sanitizeRecipientPhone(input.recipientPhone);
-    if (!recipientPhone) {
-        throw new Error('Enter a valid recipient phone in E.164 format.');
-    }
-
-    if (!input.templateName.trim()) {
-        throw new Error('Select an approved WhatsApp template.');
-    }
-
-    const bodyComponents = buildTemplateBodyComponents(input.bodyParameters ?? []);
-
-    const payload = {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: recipientPhone,
-        type: 'template',
-        template: {
-            name: input.templateName,
-            language: {
-                code: input.languageCode,
-            },
-            ...(bodyComponents ? { components: bodyComponents } : {}),
-        },
-    };
-
-    const result = await metaGraphRequest<{
-        messages?: Array<{ id: string }>;
-        contacts?: Array<{ wa_id?: string; input?: string }>;
-    }>(
-        `/${connection.phone_number_id}/messages`,
-        connection.access_token,
-        {
-            method: 'POST',
-            body: JSON.stringify(payload),
+        if (!connection) {
+            return {
+                ok: false as const,
+                error: 'No active WhatsApp connection found.',
+            };
         }
-    );
 
-    return {
-        messageId: result.messages?.[0]?.id ?? null,
-        recipientWaId: result.contacts?.[0]?.wa_id ?? recipientPhone,
-        templateName: input.templateName,
-    };
+        const recipientPhone = sanitizeRecipientPhone(input.recipientPhone);
+        if (!recipientPhone) {
+            return {
+                ok: false as const,
+                error: 'Enter a valid recipient phone in E.164 format.',
+            };
+        }
+
+        if (!input.templateName.trim()) {
+            return {
+                ok: false as const,
+                error: 'Select an approved WhatsApp template.',
+            };
+        }
+
+        if (!hasValidTemplateLanguage(input.languageCode)) {
+            return {
+                ok: false as const,
+                error: 'Use a valid Meta language code such as en_US or es_MX.',
+            };
+        }
+
+        const bodyComponents = buildTemplateBodyComponents(input.bodyParameters ?? []);
+
+        const payload = {
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to: recipientPhone,
+            type: 'template',
+            template: {
+                name: input.templateName,
+                language: {
+                    code: input.languageCode,
+                },
+                ...(bodyComponents ? { components: bodyComponents } : {}),
+            },
+        };
+
+        const result = await metaGraphRequest<{
+            messages?: Array<{ id: string }>;
+            contacts?: Array<{ wa_id?: string; input?: string }>;
+        }>(
+            `/${connection.phone_number_id}/messages`,
+            connection.access_token,
+            {
+                method: 'POST',
+                body: JSON.stringify(payload),
+            }
+        );
+
+        return {
+            ok: true as const,
+            messageId: result.messages?.[0]?.id ?? null,
+            recipientWaId: result.contacts?.[0]?.wa_id ?? recipientPhone,
+            templateName: input.templateName,
+        };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Meta message send failed.';
+        const friendlyMessage = message.includes('Account not registered')
+            ? 'The recipient number is not registered on WhatsApp, or Meta cannot recognize it in the current format. Use a real WhatsApp number in E.164 format and verify that the recipient can receive WhatsApp messages.'
+            : message;
+
+        return {
+            ok: false as const,
+            error: friendlyMessage,
+        };
+    }
 }
 
 export async function createWhatsAppTemplate(input: CreateTemplateInput) {
