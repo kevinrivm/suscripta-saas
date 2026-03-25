@@ -14,8 +14,23 @@
 
 @layer base {
   :root {
-    --background: #050505;
-    --foreground: #fafafa;
+    --background: #0d1314;
+    --foreground: #f6faf8;
+    --dashboard-shell: #0d1314;
+    --dashboard-sidebar: rgba(10, 14, 16, 0.92);
+    --dashboard-main: #101719;
+    --dashboard-text: #f6faf8;
+    --dashboard-muted: #9fb0aa;
+  }
+
+  :root[data-dashboard-theme="light"] {
+    --background: #eef5f0;
+    --foreground: #0f1720;
+    --dashboard-shell: #eef5f0;
+    --dashboard-sidebar: rgba(255, 255, 255, 0.8);
+    --dashboard-main: #f7fbf8;
+    --dashboard-text: #102019;
+    --dashboard-muted: #5d7169;
   }
 }
 
@@ -27,6 +42,27 @@
       radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.08), transparent 25%),
       radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.05), transparent 25%);
     background-attachment: fixed;
+  }
+}
+
+@layer utilities {
+  .dashboard-shell {
+    background: var(--dashboard-shell);
+    color: var(--dashboard-text);
+  }
+
+  .dashboard-sidebar {
+    background: var(--dashboard-sidebar);
+  }
+
+  .dashboard-main {
+    background: linear-gradient(180deg, color-mix(in srgb, var(--dashboard-main) 92%, white 8%), var(--dashboard-main));
+  }
+
+  .dashboard-theme-toggle {
+    background: color-mix(in srgb, var(--dashboard-sidebar) 88%, white 12%);
+    color: var(--dashboard-text);
+    border: 1px solid color-mix(in srgb, var(--dashboard-text) 12%, transparent);
   }
 }
 

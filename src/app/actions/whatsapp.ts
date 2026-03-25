@@ -71,6 +71,11 @@ interface SendTestTemplateInput {
     bodyParameters?: string[];
 }
 
+interface SendTextMessageInput {
+    recipientPhone: string;
+    bodyText: string;
+}
+
 interface CreateTemplateInput {
     name: string;
     language: string;
@@ -707,6 +712,101 @@ export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {
         return {
             ok: false as const,
             error: friendlyMessage,
+        };
+    }
+}
+
+export async function sendWhatsAppTextMessage(input: SendTextMessageInput) {
+    try {
+        const connection = await getStoredConnection();
+
+        if (!connection) {
+            return {
+                ok: false as const,
+                error: 'No active WhatsApp connection found.',
+            };
+        }
+
+        const recipientPhone = sanitizeRecipientPhone(input.recipientPhone);
+        const recipientCandidates = buildRecipientPhoneCandidates(input.recipientPhone);
+        const bodyText = input.bodyText.trim();
+
+        if (!recipientPhone || !recipientCandidates.length) {
+            return {
+                ok: false as const,
+                error: 'Enter a valid recipient phone in E.164 format.',
+            };
+        }
+
+        if (!bodyText) {
+            return {
+                ok: false as const,
+                error: 'Write a message before sending.',
+            };
+        }
+
+        let lastError: Error | null = null;
+
+        for (const candidate of recipientCandidates) {
+            const payload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: candidate,
+                type: 'text',
+                text: {
+                    body: bodyText,
+                    preview_url: false,
+                },
+            };
+
+            try {
+                const result = await metaGraphRequest<{
+                    messages?: Array<{ id: string }>;
+                    contacts?: Array<{ wa_id?: string; input?: string }>;
+                }>(
+                    `/${connection.phone_number_id}/messages`,
+                    connection.access_token,
+                    {
+                        method: 'POST',
+                        body: JSON.stringify(payload),
+                    }
+                );
+
+                const messageId = result.messages?.[0]?.id ?? null;
+                const resolvedRecipient = result.contacts?.[0]?.wa_id ?? candidate;
+
+                if (messageId) {
+                    await upsertMessageEvent({
+                        wabaId: connection.waba_id,
+                        phoneNumberId: connection.phone_number_id,
+                        messageId,
+                        recipientPhone: resolvedRecipient,
+                        direction: 'outbound',
+                        messageText: bodyText,
+                        status: 'accepted',
+                        rawPayload: payload,
+                    });
+                }
+
+                return {
+                    ok: true as const,
+                    messageId,
+                    recipientWaId: resolvedRecipient,
+                    bodyText,
+                };
+            } catch (error) {
+                lastError = error instanceof Error ? error : new Error('Meta text message send failed.');
+                if (!lastError.message.includes('Account not registered')) {
+                    throw lastError;
+                }
+            }
+        }
+
+        throw lastError ?? new Error('Meta text message send failed.');
+    } catch (error) {
+        return {
+            ok: false as const,
+            error: error instanceof Error ? error.message : 'Meta text message send failed.',
         };
     }
 }

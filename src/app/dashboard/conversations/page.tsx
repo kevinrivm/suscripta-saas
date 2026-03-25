@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getWhatsAppWorkspaceBundle } from '@/app/actions/whatsapp';
+import { getWhatsAppWorkspaceBundle, sendWhatsAppTextMessage } from '@/app/actions/whatsapp';
 
 type ConversationEvent = {
     messageId: string;
@@ -178,6 +178,8 @@ export default function ConversationsPage() {
     const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const [isSendingText, setIsSendingText] = useState(false);
+    const [draftText, setDraftText] = useState('Hola, te escribo desde Suscripta para continuar la conversacion abierta.');
     const [error, setError] = useState<string | null>(null);
 
     const refreshWorkspace = useCallback(async (background = false) => {
@@ -240,7 +242,7 @@ export default function ConversationsPage() {
     const activeThread = threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
 
     return (
-        <div className="mx-auto flex h-full min-h-full w-full max-w-7xl flex-col px-8 py-8">
+        <div className="mx-auto flex h-full min-h-full w-full max-w-7xl flex-col px-8 py-8 dashboard-page">
             <div className="mb-8 flex items-end justify-between gap-6">
                 <div>
                     <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300">
@@ -255,11 +257,11 @@ export default function ConversationsPage() {
 
                 <div className="flex items-center gap-3">
                     <div className="grid min-w-[280px] grid-cols-2 gap-3">
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-sm">
                             <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Threads reales</p>
                             <p className="mt-3 text-3xl font-semibold text-white">{liveThreads.length}</p>
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-sm">
                             <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Numero conectado</p>
                             <p className="mt-3 text-sm font-medium text-zinc-200">
                                 {workspace.connection?.displayPhoneNumber ?? 'No conectado'}
@@ -286,7 +288,7 @@ export default function ConversationsPage() {
             ) : null}
 
             <div className="grid min-h-[720px] flex-1 grid-cols-1 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0d] shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(19,26,28,0.94),rgba(12,16,18,0.98))] shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
                     <div className="border-b border-white/10 px-5 py-4">
                         <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-500">
                             Los eventos reales aparecen primero. Si mandas un mensaje manual al numero y el webhook lo
@@ -343,7 +345,7 @@ export default function ConversationsPage() {
                     </div>
                 </section>
 
-                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,20,0.96),rgba(9,9,11,0.98))] shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,31,34,0.96),rgba(14,18,20,0.98))] shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
                     {activeThread ? (
                         <>
                             <div className="flex items-center justify-between border-b border-white/10 px-7 py-5">
@@ -408,6 +410,71 @@ export default function ConversationsPage() {
                                     })}
                                 </div>
                             </div>
+
+                            {activeThread.source === 'live' ? (
+                                <div className="border-t border-white/10 px-7 py-5">
+                                    <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                                        <div className="mb-3 flex items-center justify-between gap-4">
+                                            <div>
+                                                <p className="text-sm font-medium text-white">Responder en la ventana abierta</p>
+                                                <p className="mt-1 text-xs text-zinc-500">
+                                                    Envia texto libre al numero activo. Ideal para la demo despues de recibir tu &quot;hola&quot;.
+                                                </p>
+                                            </div>
+                                            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-emerald-300">
+                                                24h window
+                                            </span>
+                                        </div>
+
+                                        <textarea
+                                            value={draftText}
+                                            onChange={(event) => setDraftText(event.target.value)}
+                                            rows={3}
+                                            className="w-full rounded-[20px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/40"
+                                            placeholder="Escribe un mensaje libre para este chat..."
+                                        />
+
+                                        <div className="mt-4 flex items-center justify-between gap-4">
+                                            <p className="text-xs text-zinc-500">
+                                                Destinatario: {activeThread.phone}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                disabled={isSendingText || !draftText.trim()}
+                                                onClick={async () => {
+                                                    setIsSendingText(true);
+                                                    try {
+                                                        const result = await sendWhatsAppTextMessage({
+                                                            recipientPhone: activeThread.phone,
+                                                            bodyText: draftText,
+                                                        });
+
+                                                        if (!result.ok) {
+                                                            setError(result.error);
+                                                            return;
+                                                        }
+
+                                                        setDraftText('');
+                                                        setError(null);
+                                                        await refreshWorkspace(true);
+                                                    } catch (sendError) {
+                                                        setError(
+                                                            sendError instanceof Error
+                                                                ? sendError.message
+                                                                : 'No se pudo enviar el mensaje libre.'
+                                                        );
+                                                    } finally {
+                                                        setIsSendingText(false);
+                                                    }
+                                                }}
+                                                className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800 disabled:text-black/50"
+                                            >
+                                                {isSendingText ? 'Enviando...' : 'Enviar mensaje'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : null}
                         </>
                     ) : (
                         <div className="flex h-full items-center justify-center px-10 text-center">
