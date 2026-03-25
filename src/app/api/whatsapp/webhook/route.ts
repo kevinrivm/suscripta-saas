@@ -15,10 +15,24 @@ interface WebhookStatus {
     errors?: WebhookStatusError[];
 }
 
+interface WebhookMessageText {
+    body?: string;
+}
+
+interface WebhookMessage {
+    id?: string;
+    from?: string;
+    timestamp?: string;
+    type?: string;
+    text?: WebhookMessageText;
+}
+
 interface WebhookChangeValue {
     metadata?: {
+        display_phone_number?: string;
         phone_number_id?: string;
     };
+    messages?: WebhookMessage[];
     statuses?: WebhookStatus[];
 }
 
@@ -62,8 +76,7 @@ export async function POST(request: NextRequest) {
             .flatMap((change) => {
                 const value = change?.value ?? {};
                 const metadata = value.metadata ?? {};
-
-                return (value.statuses ?? []).map((status) => {
+                const statusEvents = (value.statuses ?? []).map((status) => {
                     const firstError = status?.errors?.[0] ?? null;
 
                     return {
@@ -71,7 +84,6 @@ export async function POST(request: NextRequest) {
                         phone_number_id: metadata.phone_number_id ?? null,
                         message_id: status.id,
                         recipient_phone: status.recipient_id ?? null,
-                        template_name: null,
                         direction: 'outbound',
                         status: status.status ?? 'unknown',
                         error_code: firstError?.code ? String(firstError.code) : null,
@@ -84,6 +96,23 @@ export async function POST(request: NextRequest) {
                         updated_at: new Date().toISOString(),
                     };
                 });
+
+                const inboundEvents = (value.messages ?? []).map((message) => ({
+                    waba_id: null,
+                    phone_number_id: metadata.phone_number_id ?? null,
+                    message_id: message.id,
+                    recipient_phone: message.from ?? null,
+                    direction: 'inbound',
+                    message_text: message.type === 'text' ? message.text?.body ?? null : null,
+                    status: 'received',
+                    raw_payload: message,
+                    last_event_at: message.timestamp
+                        ? new Date(Number(message.timestamp) * 1000).toISOString()
+                        : new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                }));
+
+                return [...statusEvents, ...inboundEvents];
             })
             .filter((event) => event.message_id);
 

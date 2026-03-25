@@ -51,8 +51,10 @@ interface ReviewBundle {
     }>;
     recentMessageEvents: Array<{
         messageId: string;
+        direction?: string | null;
         recipientPhone?: string | null;
         templateName?: string | null;
+        messageText?: string | null;
         status: string;
         errorCode?: string | null;
         errorMessage?: string | null;
@@ -759,9 +761,10 @@ export function AppReviewConsole() {
                         <table className="w-full text-left text-sm">
                             <thead className="bg-black/40 text-xs uppercase text-zinc-500">
                                 <tr>
+                                    <th className="px-4 py-3">Direction</th>
                                     <th className="px-4 py-3">Status</th>
-                                    <th className="px-4 py-3">Recipient</th>
-                                    <th className="px-4 py-3">Template</th>
+                                    <th className="px-4 py-3">Phone</th>
+                                    <th className="px-4 py-3">Content</th>
                                     <th className="px-4 py-3">Message ID</th>
                                     <th className="px-4 py-3">Last update</th>
                                 </tr>
@@ -770,6 +773,11 @@ export function AppReviewConsole() {
                                 {bundle.recentMessageEvents.length ? (
                                     bundle.recentMessageEvents.map((event) => (
                                         <tr key={event.messageId}>
+                                            <td className="px-4 py-3">
+                                                <span className="rounded-full bg-white/5 px-3 py-1 text-xs uppercase text-zinc-300">
+                                                    {event.direction ?? 'unknown'}
+                                                </span>
+                                            </td>
                                             <td className="px-4 py-3">
                                                 <div className="font-medium text-white">{event.status}</div>
                                                 {event.errorMessage ? (
@@ -780,15 +788,21 @@ export function AppReviewConsole() {
                                                 ) : null}
                                             </td>
                                             <td className="px-4 py-3 text-zinc-300">{event.recipientPhone ?? 'Unknown'}</td>
-                                            <td className="px-4 py-3 text-zinc-300">{event.templateName ?? 'Unknown'}</td>
+                                            <td className="px-4 py-3 text-zinc-300">
+                                                {event.messageText ? (
+                                                    <div className="max-w-xs break-words">{event.messageText}</div>
+                                                ) : (
+                                                    event.templateName ?? 'Unknown'
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 text-xs text-zinc-500">{event.messageId}</td>
                                             <td className="px-4 py-3 text-zinc-300">{event.updatedAt ? new Date(event.updatedAt).toLocaleString() : 'Unknown'}</td>
                                         </tr>
                                     ))
                                 ) : (
                                     <tr>
-                                        <td className="px-4 py-6 text-zinc-400" colSpan={5}>
-                                            No delivery events captured yet. Configure the webhook URL and verify token in Meta so this table can show delivered, read, or failed statuses.
+                                        <td className="px-4 py-6 text-zinc-400" colSpan={6}>
+                                            No WhatsApp events captured yet. Configure the webhook URL and verify token in Meta so this table can show inbound messages plus delivered, read, or failed statuses.
                                         </td>
                                     </tr>
                                 )}

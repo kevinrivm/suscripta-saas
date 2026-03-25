@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_message_events (
     recipient_phone TEXT,
     template_name TEXT,
     direction TEXT DEFAULT 'outbound',
+    message_text TEXT,
     status TEXT NOT NULL,
     error_code TEXT,
     error_title TEXT,
@@ -86,6 +87,10 @@ CREATE TABLE IF NOT EXISTS public.whatsapp_message_events (
 );
 
 ALTER TABLE public.whatsapp_message_events ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.whatsapp_message_events
+ADD COLUMN IF NOT EXISTS message_text TEXT,
+ADD COLUMN IF NOT EXISTS direction TEXT DEFAULT 'outbound';
 
 CREATE POLICY "Users can view whatsapp message events"
 ON public.whatsapp_message_events

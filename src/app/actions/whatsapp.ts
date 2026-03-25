@@ -28,8 +28,10 @@ interface ReviewBundle {
     }>;
     recentMessageEvents: Array<{
         messageId: string;
+        direction?: string | null;
         recipientPhone?: string | null;
         templateName?: string | null;
+        messageText?: string | null;
         status: string;
         errorCode?: string | null;
         errorMessage?: string | null;
@@ -270,7 +272,7 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
     const supabaseAdmin = await createAdminClient();
     const { data: recentMessageEventsData } = await supabaseAdmin
         .from('whatsapp_message_events')
-        .select('message_id,recipient_phone,template_name,status,error_code,error_message,updated_at')
+        .select('message_id,direction,recipient_phone,template_name,message_text,status,error_code,error_message,updated_at')
         .eq('phone_number_id', connection.phone_number_id)
         .order('updated_at', { ascending: false })
         .limit(10);
@@ -292,8 +294,10 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
             .filter((entry) => entry.id || entry.name || entry.link),
         recentMessageEvents: (recentMessageEventsData ?? []).map((event) => ({
             messageId: event.message_id,
+            direction: event.direction ?? null,
             recipientPhone: event.recipient_phone ?? null,
             templateName: event.template_name ?? null,
+            messageText: event.message_text ?? null,
             status: event.status,
             errorCode: event.error_code ?? null,
             errorMessage: event.error_message ?? null,
@@ -308,6 +312,8 @@ async function upsertMessageEvent(event: {
     messageId: string;
     recipientPhone?: string | null;
     templateName?: string | null;
+    direction?: string | null;
+    messageText?: string | null;
     status: string;
     errorCode?: string | null;
     errorTitle?: string | null;
@@ -317,26 +323,50 @@ async function upsertMessageEvent(event: {
 }) {
     try {
         const supabaseAdmin = await createAdminClient();
-        const { error } = await supabaseAdmin.from('whatsapp_message_events').upsert(
-            {
-                waba_id: event.wabaId ?? null,
-                phone_number_id: event.phoneNumberId ?? null,
-                message_id: event.messageId,
-                recipient_phone: event.recipientPhone ?? null,
-                template_name: event.templateName ?? null,
-                direction: 'outbound',
-                status: event.status,
-                error_code: event.errorCode ?? null,
-                error_title: event.errorTitle ?? null,
-                error_message: event.errorMessage ?? null,
-                raw_payload: event.rawPayload ?? null,
-                last_event_at: event.lastEventAt ?? new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-            },
-            {
-                onConflict: 'message_id',
-            }
-        );
+        const payload: Record<string, unknown> = {
+            waba_id: event.wabaId ?? null,
+            phone_number_id: event.phoneNumberId ?? null,
+            message_id: event.messageId,
+            status: event.status,
+            last_event_at: event.lastEventAt ?? new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        };
+
+        if (event.recipientPhone !== undefined) {
+            payload.recipient_phone = event.recipientPhone;
+        }
+
+        if (event.templateName !== undefined) {
+            payload.template_name = event.templateName;
+        }
+
+        if (event.direction !== undefined) {
+            payload.direction = event.direction;
+        }
+
+        if (event.messageText !== undefined) {
+            payload.message_text = event.messageText;
+        }
+
+        if (event.errorCode !== undefined) {
+            payload.error_code = event.errorCode;
+        }
+
+        if (event.errorTitle !== undefined) {
+            payload.error_title = event.errorTitle;
+        }
+
+        if (event.errorMessage !== undefined) {
+            payload.error_message = event.errorMessage;
+        }
+
+        if (event.rawPayload !== undefined) {
+            payload.raw_payload = event.rawPayload;
+        }
+
+        const { error } = await supabaseAdmin
+            .from('whatsapp_message_events')
+            .upsert(payload, { onConflict: 'message_id' });
 
         if (error) {
             console.warn('[Suscripta] Could not persist WhatsApp message event:', error.message);
@@ -527,6 +557,7 @@ export async function sendWhatsAppTestTemplate(input: SendTestTemplateInput) {
                         messageId,
                         recipientPhone: resolvedRecipient,
                         templateName: input.templateName,
+                        direction: 'outbound',
                         status: 'accepted',
                         rawPayload: payload,
                     });
