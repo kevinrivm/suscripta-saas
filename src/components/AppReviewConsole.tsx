@@ -5,9 +5,7 @@ import { EmbeddedSignupButton } from '@/components/EmbeddedSignupButton';
 import {
     createWhatsAppTemplate,
     getWhatsAppReviewBundle,
-    registerWhatsAppPhoneNumber,
     sendWhatsAppTestTemplate,
-    subscribeWhatsAppApp,
 } from '@/app/actions/whatsapp';
 
 interface ReviewConnection {
@@ -70,52 +68,14 @@ const EMPTY_REVIEW_BUNDLE: ReviewBundle = {
     recentMessageEvents: [],
 };
 
-function derivePhoneRegistrationDefaults(displayPhoneNumber?: string | null) {
-    const digits = (displayPhoneNumber ?? '').replace(/\D/g, '');
-
-    if (!digits) {
-        return { cc: '', localPhone: '' };
-    }
-
-    if (digits.startsWith('521') && digits.length > 3) {
-        return {
-            cc: '52',
-            localPhone: digits.slice(3),
-        };
-    }
-
-    if (digits.startsWith('52') && digits.length > 2) {
-        return {
-            cc: '52',
-            localPhone: digits.slice(2),
-        };
-    }
-
-    if (digits.length > 10) {
-        return {
-            cc: digits.slice(0, digits.length - 10),
-            localPhone: digits.slice(-10),
-        };
-    }
-
-    return {
-        cc: '',
-        localPhone: digits,
-    };
-}
-
 export function AppReviewConsole() {
     const [bundle, setBundle] = useState<ReviewBundle>(EMPTY_REVIEW_BUNDLE);
     const [isLoading, setIsLoading] = useState(true);
     const [isSending, setIsSending] = useState(false);
     const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
-    const [isSubscribingApp, setIsSubscribingApp] = useState(false);
-    const [isRegisteringPhone, setIsRegisteringPhone] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [sendResult, setSendResult] = useState<string | null>(null);
     const [templateResult, setTemplateResult] = useState<string | null>(null);
-    const [subscriptionResult, setSubscriptionResult] = useState<string | null>(null);
-    const [registrationResult, setRegistrationResult] = useState<string | null>(null);
     const [recipientPhone, setRecipientPhone] = useState('');
     const [templateName, setTemplateName] = useState('');
     const [languageCode, setLanguageCode] = useState('');
@@ -124,11 +84,6 @@ export function AppReviewConsole() {
     const [newTemplateLanguage, setNewTemplateLanguage] = useState('en_US');
     const [newTemplateCategory, setNewTemplateCategory] = useState<'UTILITY' | 'MARKETING' | 'AUTHENTICATION'>('UTILITY');
     const [newTemplateBody, setNewTemplateBody] = useState('Hello {{1}}, this is a payment reminder from Suscripta. Your subscription renews in {{2}} days. Please complete payment here: {{3}} today.');
-    const [registrationCc, setRegistrationCc] = useState('52');
-    const [registrationLocalPhone, setRegistrationLocalPhone] = useState('');
-    const [registrationMethod, setRegistrationMethod] = useState<'sms' | 'voice'>('sms');
-    const [registrationPin, setRegistrationPin] = useState('');
-    const [registrationCert, setRegistrationCert] = useState('');
     const approvedTemplates = useMemo(
         () => bundle.templates.filter((template) => template.status.toUpperCase() === 'APPROVED'),
         [bundle.templates]
@@ -150,22 +105,12 @@ export function AppReviewConsole() {
                 setTemplateName(firstApproved.name);
                 setLanguageCode(firstApproved.language);
             }
-
-            if (reviewBundle.connection && !registrationLocalPhone) {
-                const defaults = derivePhoneRegistrationDefaults(reviewBundle.connection.displayPhoneNumber);
-                if (defaults.cc) {
-                    setRegistrationCc(defaults.cc);
-                }
-                if (defaults.localPhone) {
-                    setRegistrationLocalPhone(defaults.localPhone);
-                }
-            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Could not load WhatsApp review data.');
         } finally {
             setIsLoading(false);
         }
-    }, [registrationLocalPhone, templateName]);
+    }, [templateName]);
 
     useEffect(() => {
         void refreshBundle();
@@ -177,34 +122,6 @@ export function AppReviewConsole() {
         const selectedTemplate = bundle.templates.find((template) => template.name === nextTemplateName);
         if (selectedTemplate) {
             setLanguageCode(selectedTemplate.language);
-        }
-    };
-
-    const handleRegisterPhone = async () => {
-        setIsRegisteringPhone(true);
-        setError(null);
-        setRegistrationResult(null);
-
-        try {
-            const result = await registerWhatsAppPhoneNumber({
-                cc: registrationCc,
-                phoneNumber: registrationLocalPhone,
-                cert: registrationCert,
-                pin: registrationPin,
-                method: registrationMethod,
-            });
-
-            if (!result.ok) {
-                setError(result.error);
-                return;
-            }
-
-            setRegistrationResult(result.message);
-            await refreshBundle();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Could not register the connected phone number.');
-        } finally {
-            setIsRegisteringPhone(false);
         }
     };
 
@@ -237,28 +154,6 @@ export function AppReviewConsole() {
             setError(err instanceof Error ? err.message : 'Template creation failed.');
         } finally {
             setIsCreatingTemplate(false);
-        }
-    };
-
-    const handleSubscribeApp = async () => {
-        setIsSubscribingApp(true);
-        setError(null);
-        setSubscriptionResult(null);
-
-        try {
-            const result = await subscribeWhatsAppApp();
-
-            if (!result.ok) {
-                setError(result.error);
-                return;
-            }
-
-            setSubscriptionResult(result.message);
-            await refreshBundle();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Could not subscribe the Meta app.');
-        } finally {
-            setIsSubscribingApp(false);
         }
     };
 
@@ -404,121 +299,6 @@ export function AppReviewConsole() {
                                 </div>
                             </div>
 
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                                <p className="text-sm font-medium text-white">Cloud API registration</p>
-                                <p className="mt-1 text-xs text-zinc-500">
-                                    Use this when the connected sender remains in <span className="font-medium text-zinc-300">Pending</span>. Paste the certificate from WhatsApp Manager and submit the register call for the current <code className="font-mono">phone_number_id</code>.
-                                </p>
-
-                                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-zinc-200">Country code</label>
-                                        <input
-                                            value={registrationCc}
-                                            onChange={(event) => setRegistrationCc(event.target.value)}
-                                            placeholder="52"
-                                            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-zinc-200">Local phone number</label>
-                                        <input
-                                            value={registrationLocalPhone}
-                                            onChange={(event) => setRegistrationLocalPhone(event.target.value)}
-                                            placeholder="4622075722"
-                                            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="mt-4 grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-zinc-200">Verification method</label>
-                                        <select
-                                            value={registrationMethod}
-                                            onChange={(event) => setRegistrationMethod(event.target.value as 'sms' | 'voice')}
-                                            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
-                                        >
-                                            <option value="sms">sms</option>
-                                            <option value="voice">voice</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="mb-2 block text-sm font-medium text-zinc-200">Two-step PIN</label>
-                                        <input
-                                            value={registrationPin}
-                                            onChange={(event) => setRegistrationPin(event.target.value)}
-                                            placeholder="123456"
-                                            className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="mt-4">
-                                    <label className="mb-2 block text-sm font-medium text-zinc-200">Phone certificate</label>
-                                    <textarea
-                                        value={registrationCert}
-                                        onChange={(event) => setRegistrationCert(event.target.value)}
-                                        rows={5}
-                                        placeholder="Paste the certificate from WhatsApp Manager"
-                                        className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/50"
-                                    />
-                                </div>
-
-                                <button
-                                    type="button"
-                                    disabled={isRegisteringPhone}
-                                    onClick={() => {
-                                        void handleRegisterPhone();
-                                    }}
-                                    className="mt-4 w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-500"
-                                >
-                                    {isRegisteringPhone ? 'Registering number...' : 'Register connected number'}
-                                </button>
-
-                                {registrationResult ? (
-                                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-                                        {registrationResult}
-                                    </div>
-                                ) : null}
-                            </div>
-
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-5">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div>
-                                        <p className="text-sm font-medium text-white">Meta app subscription</p>
-                                        <p className="mt-1 text-xs text-zinc-500">
-                                            This matches the <code className="font-mono">POST /{'{waba_id}'}/subscribed_apps</code> step you already use in n8n.
-                                        </p>
-                                    </div>
-                                    <span className={`rounded-full px-3 py-1 text-xs ${bundle.subscribedApps.length ? 'bg-emerald-500/10 text-emerald-300' : 'bg-white/5 text-zinc-400'}`}>
-                                        {bundle.subscribedApps.length ? 'Subscribed' : 'Not subscribed'}
-                                    </span>
-                                </div>
-
-                                {bundle.subscribedApps.length ? (
-                                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-sm text-emerald-200">
-                                        Connected app: {bundle.subscribedApps[0].name ?? bundle.subscribedApps[0].id ?? 'Meta app'}
-                                    </div>
-                                ) : null}
-
-                                <button
-                                    type="button"
-                                    disabled={isSubscribingApp}
-                                    onClick={() => {
-                                        void handleSubscribeApp();
-                                    }}
-                                    className="mt-4 w-full rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/5 disabled:text-zinc-500"
-                                >
-                                    {isSubscribingApp ? 'Subscribing app...' : 'Subscribe Meta app to this WABA'}
-                                </button>
-
-                                {subscriptionResult ? (
-                                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-                                        {subscriptionResult}
-                                    </div>
-                                ) : null}
-                            </div>
                         </div>
                     ) : (
                         <div className="mt-6 rounded-2xl border border-dashed border-white/10 bg-black/20 p-6 text-sm text-zinc-400">
@@ -736,80 +516,6 @@ export function AppReviewConsole() {
                     )}
                 </section>
 
-                <section className="glass-panel rounded-2xl p-7 lg:col-span-2">
-                    <div className="flex items-start justify-between gap-4">
-                        <div>
-                            <h2 className="text-xl font-semibold">5. Delivery status</h2>
-                            <p className="mt-2 text-sm text-zinc-400">
-                                The send API only confirms acceptance. Real delivery outcomes arrive later through WhatsApp webhooks.
-                            </p>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => {
-                                startTransition(() => {
-                                    void refreshBundle();
-                                });
-                            }}
-                            className="rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300 hover:border-white/20 hover:bg-white/5"
-                        >
-                            Refresh statuses
-                        </button>
-                    </div>
-
-                    <div className="mt-6 overflow-hidden rounded-2xl border border-white/10">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-black/40 text-xs uppercase text-zinc-500">
-                                <tr>
-                                    <th className="px-4 py-3">Direction</th>
-                                    <th className="px-4 py-3">Status</th>
-                                    <th className="px-4 py-3">Phone</th>
-                                    <th className="px-4 py-3">Content</th>
-                                    <th className="px-4 py-3">Message ID</th>
-                                    <th className="px-4 py-3">Last update</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5 bg-black/20">
-                                {bundle.recentMessageEvents.length ? (
-                                    bundle.recentMessageEvents.map((event) => (
-                                        <tr key={event.messageId}>
-                                            <td className="px-4 py-3">
-                                                <span className="rounded-full bg-white/5 px-3 py-1 text-xs uppercase text-zinc-300">
-                                                    {event.direction ?? 'unknown'}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                <div className="font-medium text-white">{event.status}</div>
-                                                {event.errorMessage ? (
-                                                    <div className="mt-1 text-xs text-red-300">
-                                                        {event.errorCode ? `${event.errorCode}: ` : ''}
-                                                        {event.errorMessage}
-                                                    </div>
-                                                ) : null}
-                                            </td>
-                                            <td className="px-4 py-3 text-zinc-300">{event.recipientPhone ?? 'Unknown'}</td>
-                                            <td className="px-4 py-3 text-zinc-300">
-                                                {event.messageText ? (
-                                                    <div className="max-w-xs break-words">{event.messageText}</div>
-                                                ) : (
-                                                    event.templateName ?? 'Unknown'
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-xs text-zinc-500">{event.messageId}</td>
-                                            <td className="px-4 py-3 text-zinc-300">{event.updatedAt ? new Date(event.updatedAt).toLocaleString() : 'Unknown'}</td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td className="px-4 py-6 text-zinc-400" colSpan={6}>
-                                            No WhatsApp events captured yet. Configure the webhook URL and verify token in Meta so this table can show inbound messages plus delivered, read, or failed statuses.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
             </div>
 
             {error && (
