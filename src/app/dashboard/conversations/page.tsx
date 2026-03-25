@@ -1,3 +1,6 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getWhatsAppWorkspaceBundle } from '@/app/actions/whatsapp';
 
 type ConversationEvent = {
@@ -12,6 +15,13 @@ type ConversationEvent = {
     updatedAt?: string | null;
 };
 
+type WorkspaceBundle = {
+    connection: {
+        displayPhoneNumber?: string | null;
+    } | null;
+    recentMessageEvents: ConversationEvent[];
+};
+
 type ConversationThread = {
     id: string;
     title: string;
@@ -21,6 +31,11 @@ type ConversationThread = {
     lastStatus: string;
     lastUpdatedAt?: string | null;
     events: ConversationEvent[];
+};
+
+const EMPTY_WORKSPACE: WorkspaceBundle = {
+    connection: null,
+    recentMessageEvents: [],
 };
 
 function formatRelativeDate(value?: string | null) {
@@ -79,13 +94,10 @@ function buildLiveThreads(events: ConversationEvent[]): ConversationThread[] {
             });
             const latestEvent = sortedEvents[sortedEvents.length - 1];
             const numericPhone = phone.replace(/\D/g, '');
-            const maskedTitle = numericPhone.length >= 4
-                ? `Cliente ${numericPhone.slice(-4)}`
-                : 'Cliente real';
 
             return {
                 id: phone,
-                title: maskedTitle,
+                title: numericPhone.length >= 4 ? `Cliente ${numericPhone.slice(-4)}` : 'Cliente real',
                 phone,
                 source: 'live' as const,
                 lastMessage:
@@ -161,14 +173,74 @@ function statusTone(status: string) {
     return 'text-zinc-300 bg-white/5 border-white/10';
 }
 
-export default async function ConversationsPage() {
-    const workspace = await getWhatsAppWorkspaceBundle(120);
-    const liveThreads = buildLiveThreads(workspace.recentMessageEvents);
-    const threads = [...liveThreads, ...buildDemoThreads()].slice(0, 6);
-    const activeThread = threads[0] ?? null;
+export default function ConversationsPage() {
+    const [workspace, setWorkspace] = useState<WorkspaceBundle>(EMPTY_WORKSPACE);
+    const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [isRefreshing, setIsRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const refreshWorkspace = useCallback(async (background = false) => {
+        if (background) {
+            setIsRefreshing(true);
+        } else {
+            setIsLoading(true);
+        }
+
+        try {
+            const nextWorkspace = await getWhatsAppWorkspaceBundle(120);
+            setWorkspace({
+                connection: nextWorkspace.connection
+                    ? { displayPhoneNumber: nextWorkspace.connection.displayPhoneNumber }
+                    : null,
+                recentMessageEvents: nextWorkspace.recentMessageEvents,
+            });
+            setError(null);
+        } catch (nextError) {
+            setError(nextError instanceof Error ? nextError.message : 'No se pudo cargar la bandeja.');
+        } finally {
+            setIsLoading(false);
+            setIsRefreshing(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshWorkspace(false);
+    }, [refreshWorkspace]);
+
+    useEffect(() => {
+        const interval = window.setInterval(() => {
+            void refreshWorkspace(true);
+        }, 8000);
+
+        return () => window.clearInterval(interval);
+    }, [refreshWorkspace]);
+
+    const liveThreads = useMemo(
+        () => buildLiveThreads(workspace.recentMessageEvents),
+        [workspace.recentMessageEvents]
+    );
+
+    const threads = useMemo(
+        () => [...liveThreads, ...buildDemoThreads()].slice(0, 8),
+        [liveThreads]
+    );
+
+    useEffect(() => {
+        if (!threads.length) {
+            setSelectedThreadId(null);
+            return;
+        }
+
+        if (!selectedThreadId || !threads.some((thread) => thread.id === selectedThreadId)) {
+            setSelectedThreadId(threads[0].id);
+        }
+    }, [selectedThreadId, threads]);
+
+    const activeThread = threads.find((thread) => thread.id === selectedThreadId) ?? threads[0] ?? null;
 
     return (
-        <div className="mx-auto flex h-full w-full max-w-7xl flex-col px-8 py-8">
+        <div className="mx-auto flex h-full min-h-full w-full max-w-7xl flex-col px-8 py-8">
             <div className="mb-8 flex items-end justify-between gap-6">
                 <div>
                     <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300">
@@ -176,73 +248,102 @@ export default async function ConversationsPage() {
                     </span>
                     <h1 className="mt-4 text-4xl font-semibold tracking-tight">Conversaciones</h1>
                     <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">
-                        Vista unificada de actividad de WhatsApp. Las conversaciones reales llegan desde los
-                        webhooks y, si aun no hay volumen, se complementan con ejemplos visuales para mostrar el
-                        flujo completo del producto.
+                        Esta vista ya reacciona a mensajes entrantes y salientes guardados en Supabase. Hace polling
+                        ligero para que tus pruebas manuales aparezcan sin recargar toda la app.
                     </p>
                 </div>
 
-                <div className="grid min-w-[280px] grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Threads reales</p>
-                        <p className="mt-3 text-3xl font-semibold text-white">{liveThreads.length}</p>
-                    </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Numero conectado</p>
-                        <p className="mt-3 text-sm font-medium text-zinc-200">
-                            {workspace.connection?.displayPhoneNumber ?? 'No conectado'}
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <div className="grid min-h-[720px] flex-1 grid-cols-1 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-                <section className="overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0d] shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
-                    <div className="border-b border-white/10 px-5 py-4">
-                        <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-500">
-                            Buscar, filtrar y priorizar conversaciones. Para el MVP, la lista muestra primero la
-                            actividad real sincronizada.
+                <div className="flex items-center gap-3">
+                    <div className="grid min-w-[280px] grid-cols-2 gap-3">
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Threads reales</p>
+                            <p className="mt-3 text-3xl font-semibold text-white">{liveThreads.length}</p>
+                        </div>
+                        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                            <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Numero conectado</p>
+                            <p className="mt-3 text-sm font-medium text-zinc-200">
+                                {workspace.connection?.displayPhoneNumber ?? 'No conectado'}
+                            </p>
                         </div>
                     </div>
 
-                    <div className="divide-y divide-white/5">
-                        {threads.map((thread, index) => (
-                            <div
-                                key={thread.id}
-                                className={`px-5 py-4 ${index === 0 ? 'bg-emerald-500/8' : 'hover:bg-white/[0.03]'}`}
-                            >
-                                <div className="flex items-start justify-between gap-3">
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <p className="font-medium text-white">{thread.title}</p>
-                                            <span
-                                                className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${
-                                                    thread.source === 'live'
-                                                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                                                        : 'border-white/10 bg-white/5 text-zinc-400'
-                                                }`}
-                                            >
-                                                {thread.source}
+                    <button
+                        type="button"
+                        onClick={() => {
+                            void refreshWorkspace(true);
+                        }}
+                        className="rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:border-white/20 hover:bg-white/5"
+                    >
+                        {isRefreshing ? 'Actualizando...' : 'Refresh'}
+                    </button>
+                </div>
+            </div>
+
+            {error ? (
+                <div className="mb-6 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-5 py-4 text-sm text-rose-200">
+                    {error}
+                </div>
+            ) : null}
+
+            <div className="grid min-h-[720px] flex-1 grid-cols-1 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[#0b0b0d] shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+                    <div className="border-b border-white/10 px-5 py-4">
+                        <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-500">
+                            Los eventos reales aparecen primero. Si mandas un mensaje manual al numero y el webhook lo
+                            guarda, deberia entrar aqui en el siguiente refresh automatico.
+                        </div>
+                    </div>
+
+                    <div className="min-h-0 flex-1 overflow-y-auto">
+                        <div className="divide-y divide-white/5">
+                            {isLoading && !threads.length ? (
+                                <div className="px-5 py-8 text-sm text-zinc-400">Cargando conversaciones...</div>
+                            ) : (
+                                threads.map((thread) => (
+                                    <button
+                                        key={thread.id}
+                                        type="button"
+                                        onClick={() => setSelectedThreadId(thread.id)}
+                                        className={`block w-full px-5 py-4 text-left transition ${
+                                            activeThread?.id === thread.id
+                                                ? 'bg-emerald-500/8'
+                                                : 'hover:bg-white/[0.03]'
+                                        }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium text-white">{thread.title}</p>
+                                                    <span
+                                                        className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${
+                                                            thread.source === 'live'
+                                                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                                                                : 'border-white/10 bg-white/5 text-zinc-400'
+                                                        }`}
+                                                    >
+                                                        {thread.source}
+                                                    </span>
+                                                </div>
+                                                <p className="mt-1 text-xs text-zinc-500">{thread.phone}</p>
+                                            </div>
+
+                                            <span className="text-xs text-zinc-500">
+                                                {formatRelativeDate(thread.lastUpdatedAt)}
                                             </span>
                                         </div>
-                                        <p className="mt-1 text-xs text-zinc-500">{thread.phone}</p>
-                                    </div>
 
-                                    <span className="text-xs text-zinc-500">
-                                        {formatRelativeDate(thread.lastUpdatedAt)}
-                                    </span>
-                                </div>
-
-                                <p className="mt-3 line-clamp-2 text-sm text-zinc-300">{thread.lastMessage}</p>
-                                <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusTone(thread.lastStatus)}`}>
-                                    {thread.lastStatus}
-                                </span>
-                            </div>
-                        ))}
+                                        <p className="mt-3 line-clamp-2 text-sm text-zinc-300">{thread.lastMessage}</p>
+                                        <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusTone(thread.lastStatus)}`}>
+                                            {thread.lastStatus}
+                                        </span>
+                                    </button>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </section>
 
-                <section className="overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,20,0.96),rgba(9,9,11,0.98))] shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(18,18,20,0.96),rgba(9,9,11,0.98))] shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
                     {activeThread ? (
                         <>
                             <div className="flex items-center justify-between border-b border-white/10 px-7 py-5">
@@ -268,42 +369,44 @@ export default async function ConversationsPage() {
                                 </div>
                             </div>
 
-                            <div className="space-y-4 px-7 py-6">
-                                {activeThread.events.map((event) => {
-                                    const isInbound = event.direction === 'inbound';
-                                    const bubbleClass = isInbound
-                                        ? 'mr-auto border-white/10 bg-white/[0.03]'
-                                        : 'ml-auto border-emerald-500/20 bg-emerald-500/10';
+                            <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+                                <div className="space-y-4">
+                                    {activeThread.events.map((event) => {
+                                        const isInbound = event.direction === 'inbound';
+                                        const bubbleClass = isInbound
+                                            ? 'mr-auto border-white/10 bg-white/[0.03]'
+                                            : 'ml-auto border-emerald-500/20 bg-emerald-500/10';
 
-                                    return (
-                                        <div key={event.messageId} className={`max-w-[78%] rounded-[24px] border px-5 py-4 ${bubbleClass}`}>
-                                            <div className="flex items-center justify-between gap-4">
-                                                <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">
-                                                    {isInbound ? 'Entrante' : 'Saliente'}
-                                                </span>
-                                                <span className="text-xs text-zinc-500">
-                                                    {formatEventTime(event.updatedAt)}
-                                                </span>
-                                            </div>
-
-                                            <div className="mt-3 text-sm leading-6 text-zinc-200">
-                                                {event.messageText ?? event.templateName ?? 'Actividad sincronizada desde WhatsApp'}
-                                            </div>
-
-                                            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-                                                <span className={`rounded-full border px-2.5 py-1 ${statusTone(event.status)}`}>
-                                                    {event.status}
-                                                </span>
-                                                {event.errorMessage ? (
-                                                    <span className="text-rose-300">
-                                                        {event.errorCode ? `${event.errorCode}: ` : ''}
-                                                        {event.errorMessage}
+                                        return (
+                                            <div key={event.messageId} className={`max-w-[78%] rounded-[24px] border px-5 py-4 ${bubbleClass}`}>
+                                                <div className="flex items-center justify-between gap-4">
+                                                    <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                                                        {isInbound ? 'Entrante' : 'Saliente'}
                                                     </span>
-                                                ) : null}
+                                                    <span className="text-xs text-zinc-500">
+                                                        {formatEventTime(event.updatedAt)}
+                                                    </span>
+                                                </div>
+
+                                                <div className="mt-3 text-sm leading-6 text-zinc-200">
+                                                    {event.messageText ?? event.templateName ?? 'Actividad sincronizada desde WhatsApp'}
+                                                </div>
+
+                                                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                                                    <span className={`rounded-full border px-2.5 py-1 ${statusTone(event.status)}`}>
+                                                        {event.status}
+                                                    </span>
+                                                    {event.errorMessage ? (
+                                                        <span className="text-rose-300">
+                                                            {event.errorCode ? `${event.errorCode}: ` : ''}
+                                                            {event.errorMessage}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
                         </>
                     ) : (
