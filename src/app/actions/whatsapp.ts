@@ -133,6 +133,14 @@ function shouldMarkConnectionInactive(message: string) {
     );
 }
 
+function buildWhatsAppEventsSchemaErrorMessage(message: string) {
+    if (message.toLowerCase().includes('message_text')) {
+        return 'The Supabase table whatsapp_message_events is missing the message_text column. Run: ALTER TABLE public.whatsapp_message_events ADD COLUMN IF NOT EXISTS message_text TEXT;';
+    }
+
+    return message;
+}
+
 async function markConnectionInactive(connectionId?: string) {
     if (!connectionId) {
         return;
@@ -270,12 +278,16 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
     }
 
     const supabaseAdmin = await createAdminClient();
-    const { data: recentMessageEventsData } = await supabaseAdmin
+    const { data: recentMessageEventsData, error: recentMessageEventsError } = await supabaseAdmin
         .from('whatsapp_message_events')
         .select('message_id,direction,recipient_phone,template_name,message_text,status,error_code,error_message,updated_at')
         .eq('phone_number_id', connection.phone_number_id)
         .order('updated_at', { ascending: false })
         .limit(10);
+
+    if (recentMessageEventsError) {
+        throw new Error(buildWhatsAppEventsSchemaErrorMessage(recentMessageEventsError.message));
+    }
 
     return {
         connection: {

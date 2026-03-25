@@ -123,6 +123,11 @@ export async function POST(request: NextRequest) {
                 .upsert(events, { onConflict: 'message_id' });
 
             if (error) {
+                if (error.message?.toLowerCase().includes('message_text')) {
+                    console.error(
+                        '[Suscripta] WhatsApp webhook schema mismatch: add message_text to whatsapp_message_events.'
+                    );
+                }
                 console.error('[Suscripta] Could not persist WhatsApp webhook statuses:', error);
             }
         }
