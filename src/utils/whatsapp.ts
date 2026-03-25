@@ -33,6 +33,11 @@ export interface WhatsAppTemplateSummary {
     language: string;
     category?: string;
     sub_category?: string;
+    components?: Array<{
+        type?: string;
+        text?: string;
+        format?: string;
+    }>;
 }
 
 interface MetaGraphError {

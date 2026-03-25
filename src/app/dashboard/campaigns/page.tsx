@@ -1,82 +1,74 @@
-export default function Campaigns() {
+import { getWhatsAppWorkspaceBundle } from '@/app/actions/whatsapp';
+import { CampaignComposer } from '@/components/dashboard/CampaignComposer';
+
+export default async function CampaignsPage() {
+    const workspace = await getWhatsAppWorkspaceBundle(40);
+    const approvedTemplates = workspace.templates
+        .filter((template) => template.status.toUpperCase() === 'APPROVED')
+        .map((template) => ({
+            id: template.id,
+            name: template.name,
+            language: template.language,
+            category: template.category,
+            bodyText:
+                template.components?.find((component) => component.type === 'BODY')?.text ??
+                'Template body unavailable.',
+        }));
+
+    const recentRecipients = [...new Set(
+        workspace.recentMessageEvents
+            .map((event) => event.recipientPhone?.trim())
+            .filter((phone): phone is string => Boolean(phone))
+    )]
+        .slice(0, 4)
+        .map((phone, index) => ({
+            phone,
+            label: index === 0 ? `Ultimo destinatario · ${phone}` : phone,
+        }));
+
     return (
-        <div className="p-10 max-w-5xl mx-auto w-full">
-            <div className="mb-8 flex justify-between items-center">
+        <div className="mx-auto w-full max-w-7xl px-8 py-8">
+            <div className="mb-8 flex items-end justify-between gap-6">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight mb-2">Programar Recordatorios</h1>
-                    <p className="text-zinc-400">Automatiza envíos masivos basándote en la fecha de suscripción de tu base de datos.</p>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-8">
-                {/* Form */}
-                <div className="glass-panel p-8 rounded-2xl border border-white/5">
-                    <form className="flex flex-col gap-6">
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Segmento de Contactos</label>
-                            <select className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 appearance-none text-zinc-200">
-                                <option value="">Expiran en los próximos 7 días</option>
-                                <option value="">Expiran hoy</option>
-                                <option value="">Ya vencidos (Recuperación)</option>
-                                <option value="">Todos los contactos activos</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Plantilla a Utilizar</label>
-                            <select className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 appearance-none text-zinc-200">
-                                <option value="1">Plantilla: Aviso de Expiración - 3 Días</option>
-                                <option value="2">Plantilla: Enlace de Renovación</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-2">Fecha y Hora de Envío</label>
-                            <div className="flex gap-4">
-                                <input
-                                    type="date"
-                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 text-zinc-200 [color-scheme:dark]"
-                                />
-                                <input
-                                    type="time"
-                                    className="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-emerald-500/50 text-zinc-200 [color-scheme:dark]"
-                                />
-                            </div>
-                        </div>
-
-                        <div className="pt-4 border-t border-white/5 mt-2">
-                            <button
-                                type="button"
-                                className="w-full px-8 py-4 rounded-xl bg-emerald-500 text-black font-semibold hover:bg-emerald-400 transition-all font-sans text-lg shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:shadow-[0_0_30px_rgba(16,185,129,0.5)] transform hover:-translate-y-1"
-                            >
-                                Agendar Envío Automatizado
-                            </button>
-                        </div>
-                    </form>
+                    <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300">
+                        Messaging MVP
+                    </span>
+                    <h1 className="mt-4 text-4xl font-semibold tracking-tight">Envios</h1>
+                    <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">
+                        Esta es la experiencia final del producto para disparar recordatorios. Ya trabaja con la
+                        plantilla real aprobada y con el numero conectado en Meta.
+                    </p>
                 </div>
 
-                {/* Sidebar Summary */}
-                <div className="flex flex-col gap-6">
-                    <div className="glass-panel p-6 rounded-2xl border border-white/5">
-                        <h3 className="text-lg font-semibold mb-4 border-b border-white/10 pb-2">Resumen de Campaña</h3>
-                        <ul className="text-sm text-zinc-400 flex flex-col gap-3">
-                            <li className="flex justify-between"><span>Destinatarios Estimados:</span> <span className="text-emerald-400 font-medium font-mono">245</span></li>
-                            <li className="flex justify-between"><span>Costo Aprox Meta:</span> <span className="font-mono text-white">$ 12.50 USD</span></li>
-                            <li className="flex justify-between mt-2 pt-2 border-t border-white/5"><span>Canal de Envío:</span> <span className="font-medium text-white">Mi Número Comercial (+52 55...)</span></li>
-                        </ul>
+                <div className="grid min-w-[320px] grid-cols-2 gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Plantillas listas</p>
+                        <p className="mt-3 text-3xl font-semibold text-white">{approvedTemplates.length}</p>
                     </div>
-
-                    <div className="glass-panel p-6 rounded-2xl border border-white/5 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 border-indigo-500/20">
-                        <h3 className="flex items-center gap-2 font-semibold text-indigo-300 mb-2">
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Consejo de Meta API
-                        </h3>
-                        <p className="text-xs text-indigo-200 leading-relaxed">Verifica el consentimiento de opt-in. Meta puede restringir el uso del Embedded Signup si tus usuarios bloquean frecuentemente tus automatizaciones de cobranza.</p>
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Numero conectado</p>
+                        <p className="mt-3 text-sm font-medium text-zinc-200">
+                            {workspace.connection?.displayPhoneNumber ?? 'No conectado'}
+                        </p>
                     </div>
                 </div>
             </div>
+
+            {workspace.connection && approvedTemplates.length ? (
+                <CampaignComposer
+                    connectedNumber={workspace.connection.displayPhoneNumber}
+                    approvedTemplates={approvedTemplates}
+                    recentRecipients={recentRecipients}
+                />
+            ) : (
+                <div className="rounded-[28px] border border-dashed border-white/10 bg-black/20 px-8 py-12 text-center">
+                    <h2 className="text-2xl font-semibold text-white">Aun no esta listo para enviar</h2>
+                    <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
+                        Para usar esta pantalla necesitas un numero conectado y al menos una plantilla APPROVED en tu
+                        WABA. Cuando ambas cosas existan, aqui podras disparar el reminder real desde el dashboard.
+                    </p>
+                </div>
+            )}
         </div>
     );
 }

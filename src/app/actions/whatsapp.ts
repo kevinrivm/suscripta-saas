@@ -39,6 +39,31 @@ interface ReviewBundle {
     }>;
 }
 
+interface WorkspaceMessageEvent {
+    messageId: string;
+    direction?: string | null;
+    recipientPhone?: string | null;
+    templateName?: string | null;
+    messageText?: string | null;
+    status: string;
+    errorCode?: string | null;
+    errorMessage?: string | null;
+    updatedAt?: string | null;
+}
+
+interface WorkspaceBundle {
+    connection: {
+        wabaId: string;
+        phoneNumberId: string;
+        displayPhoneNumber?: string | null;
+        verifiedName?: string | null;
+        status?: string | null;
+    } | null;
+    phoneProfile: WhatsAppPhoneProfile | null;
+    templates: WhatsAppTemplateSummary[];
+    recentMessageEvents: WorkspaceMessageEvent[];
+}
+
 interface SendTestTemplateInput {
     recipientPhone: string;
     templateName: string;
@@ -304,6 +329,89 @@ export async function getWhatsAppReviewBundle(): Promise<ReviewBundle> {
         subscribedApps: (subscribedAppsResponse.data ?? [])
             .map((entry) => entry.whatsapp_business_api_data ?? {})
             .filter((entry) => entry.id || entry.name || entry.link),
+        recentMessageEvents: (recentMessageEventsData ?? []).map((event) => ({
+            messageId: event.message_id,
+            direction: event.direction ?? null,
+            recipientPhone: event.recipient_phone ?? null,
+            templateName: event.template_name ?? null,
+            messageText: event.message_text ?? null,
+            status: event.status,
+            errorCode: event.error_code ?? null,
+            errorMessage: event.error_message ?? null,
+            updatedAt: event.updated_at ?? null,
+        })),
+    };
+}
+
+export async function getWhatsAppWorkspaceBundle(
+    eventLimit = 80
+): Promise<WorkspaceBundle> {
+    const connection = await getStoredConnection();
+
+    if (!connection) {
+        return {
+            connection: null,
+            phoneProfile: null,
+            templates: [],
+            recentMessageEvents: [],
+        };
+    }
+
+    let phoneProfile: WhatsAppPhoneProfile;
+    let templatesResponse: { data?: WhatsAppTemplateSummary[] };
+
+    try {
+        [phoneProfile, templatesResponse] = await Promise.all([
+            metaGraphRequest<WhatsAppPhoneProfile>(
+                `/${connection.phone_number_id}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,name_status,platform_type,throughput`,
+                connection.access_token
+            ),
+            metaGraphRequest<{ data?: WhatsAppTemplateSummary[] }>(
+                `/${connection.waba_id}/message_templates?fields=id,name,status,language,category,sub_category,components&limit=100`,
+                connection.access_token
+            ),
+        ]);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown Meta validation error.';
+
+        if (shouldMarkConnectionInactive(message)) {
+            await markConnectionInactive(connection.id);
+
+            return {
+                connection: null,
+                phoneProfile: null,
+                templates: [],
+                recentMessageEvents: [],
+            };
+        }
+
+        throw error;
+    }
+
+    const supabaseAdmin = await createAdminClient();
+    const { data: recentMessageEventsData, error: recentMessageEventsError } = await supabaseAdmin
+        .from('whatsapp_message_events')
+        .select('message_id,direction,recipient_phone,template_name,message_text,status,error_code,error_message,updated_at')
+        .eq('phone_number_id', connection.phone_number_id)
+        .order('updated_at', { ascending: false })
+        .limit(eventLimit);
+
+    if (recentMessageEventsError) {
+        throw new Error(buildWhatsAppEventsSchemaErrorMessage(recentMessageEventsError.message));
+    }
+
+    return {
+        connection: {
+            wabaId: connection.waba_id,
+            phoneNumberId: connection.phone_number_id,
+            displayPhoneNumber: connection.display_phone_number ?? phoneProfile.display_phone_number ?? null,
+            verifiedName: connection.verified_name ?? phoneProfile.verified_name ?? null,
+            status: connection.is_active ? 'active' : 'inactive',
+        },
+        phoneProfile,
+        templates: (templatesResponse.data ?? []).sort((left, right) =>
+            left.name.localeCompare(right.name)
+        ),
         recentMessageEvents: (recentMessageEventsData ?? []).map((event) => ({
             messageId: event.message_id,
             direction: event.direction ?? null,
