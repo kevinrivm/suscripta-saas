@@ -99,8 +99,8 @@ export default function Home() {
           </div>
           <p className="text-zinc-500 text-sm">© {new Date().getFullYear()} Suscripta. Todos los derechos reservados.</p>
           <div className="flex gap-6 text-sm text-zinc-400">
-            <Link href="/terms" className="hover:text-white transition-colors">Términos y Condiciones</Link>
-            <Link href="/privacy" className="hover:text-white transition-colors">Política de Privacidad</Link>
+            <Link href="/service-conditions" className="hover:text-white transition-colors">Condiciones del Servicio</Link>
+            <Link href="/privacy" className="hover:text-white transition-colors">Politica de Privacidad</Link>
           </div>
         </div>
       </footer>

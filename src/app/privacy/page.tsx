@@ -86,7 +86,7 @@ export default function PrivacyPage() {
                 <div className="mx-auto flex max-w-3xl justify-between px-6 py-8 text-sm text-zinc-500">
                     <p>(c) {new Date().getFullYear()} Suscripta Inc.</p>
                     <div className="flex gap-4">
-                        <Link href="/terms" className="transition-colors hover:text-white">Terminos y Condiciones</Link>
+                        <Link href="/service-conditions" className="transition-colors hover:text-white">Condiciones del Servicio</Link>
                     </div>
                 </div>
             </footer>
