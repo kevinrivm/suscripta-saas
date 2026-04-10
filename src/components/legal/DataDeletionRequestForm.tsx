@@ -1,36 +1,62 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
-const NOTIFICATION_EMAIL = "kevinrivm@gmail.com";
-
-function buildMailtoUrl(email: string) {
-  const subject = "Suscripta - Data deletion request";
-  const body = [
-    "Hello Suscripta team,",
-    "",
-    "I want to request the deletion of my account data from the platform.",
-    "",
-    `Registered email: ${email}`,
-    "",
-    "Please confirm when the deletion process has been completed.",
-  ].join("\n");
-
-  return `mailto:${NOTIFICATION_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-}
+const DATA_DELETION_WEBHOOK_URL =
+  "https://nprod.aishiagency.tech/webhook/data-deletion-notification";
 
 export default function DataDeletionRequestForm() {
   const [email, setEmail] = useState("");
-
-  const mailtoUrl = useMemo(() => {
-    if (!email.trim()) {
-      return "";
-    }
-
-    return buildMailtoUrl(email.trim());
-  }, [email]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    tone: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const hasValidEmail = /\S+@\S+\.\S+/.test(email.trim());
+
+  async function handleSubmit() {
+    if (!hasValidEmail || isSubmitting) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFeedback(null);
+
+    try {
+      const response = await fetch(DATA_DELETION_WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          source: "suscripta-data-deletion-page",
+          requested_at: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Webhook responded with ${response.status}`);
+      }
+
+      setFeedback({
+        tone: "success",
+        message:
+          "Tu solicitud fue enviada correctamente. Nuestro equipo revisara el correo registrado para procesar la eliminacion de datos.",
+      });
+      setEmail("");
+    } catch (error) {
+      console.error("[Suscripta] Data deletion webhook failed:", error);
+      setFeedback({
+        tone: "error",
+        message:
+          "No pudimos enviar tu solicitud en este momento. Intenta de nuevo en unos minutos.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div className="rounded-3xl border border-white/10 bg-black/20 p-6 shadow-[0_25px_60px_rgba(0,0,0,0.25)]">
@@ -42,9 +68,9 @@ export default function DataDeletionRequestForm() {
           Solicita la eliminacion manual de tus datos
         </h2>
         <p className="mt-3 text-sm leading-7 text-zinc-400">
-          Escribe el correo con el que te registraste en Suscripta. Al presionar el boton,
-          se abrira un correo dirigido a nuestro equipo para que podamos localizar tu cuenta y
-          completar la eliminacion manual.
+          Escribe el correo con el que te registraste en Suscripta. Al enviar el formulario,
+          notificaremos a nuestro backend operativo para localizar tu cuenta y gestionar la
+          eliminacion manual.
         </p>
       </div>
 
@@ -61,20 +87,34 @@ export default function DataDeletionRequestForm() {
       />
 
       <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center">
-        <a
-          href={hasValidEmail ? mailtoUrl : undefined}
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={!hasValidEmail || isSubmitting}
           className={`inline-flex items-center justify-center rounded-2xl px-5 py-3 text-sm font-semibold transition ${
-            hasValidEmail
+            hasValidEmail && !isSubmitting
               ? "bg-emerald-500 text-black hover:bg-emerald-400"
               : "cursor-not-allowed bg-zinc-800 text-zinc-500"
           }`}
         >
-          Enviar solicitud por correo
-        </a>
+          {isSubmitting ? "Enviando solicitud..." : "Enviar solicitud"}
+        </button>
         <p className="text-xs leading-6 text-zinc-500">
-          Destino de la solicitud: <span className="text-zinc-300">{NOTIFICATION_EMAIL}</span>
+          La solicitud se enviara de forma segura a nuestro flujo interno de procesamiento.
         </p>
       </div>
+
+      {feedback ? (
+        <div
+          className={`mt-4 rounded-2xl border px-4 py-3 text-sm leading-6 ${
+            feedback.tone === "success"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+              : "border-red-500/30 bg-red-500/10 text-red-200"
+          }`}
+        >
+          {feedback.message}
+        </div>
+      ) : null}
     </div>
   );
 }
