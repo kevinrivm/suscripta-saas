@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
         // 3) Additional Step: Fetch the actual phone number string and business name from Meta
         let display_phone_number = null;
         let verified_name = null;
+        let meta_user_id: string | null = null;
 
         try {
             const phoneInfoRes = await fetch(`https://graph.facebook.com/v22.0/${phone_number_id}?access_token=${access_token}`);
@@ -92,6 +93,17 @@ export async function POST(request: NextRequest) {
             console.warn('[Suscripta] Error reaching Graph API for phone details:', phoneErr);
         }
 
+        try {
+            const metaUserRes = await fetch(`https://graph.facebook.com/v22.0/me?fields=id&access_token=${access_token}`);
+            const metaUserData = await metaUserRes.json();
+
+            if (metaUserData && !metaUserData.error && typeof metaUserData.id === 'string') {
+                meta_user_id = metaUserData.id;
+            }
+        } catch (metaUserErr) {
+            console.warn('[Suscripta] Error reaching Graph API for Meta user details:', metaUserErr);
+        }
+
         // Store access_token, waba_id, phone_number_id in Supabase
         const supabaseAdmin = await createAdminClient();
         const supabaseUser = await createClient();
@@ -99,6 +111,22 @@ export async function POST(request: NextRequest) {
         // 1) Verify the user is authenticated (if using Supabase Auth later)
         const { data: { user } } = await supabaseUser.auth.getUser();
         const userId = user?.id || null;
+
+        if (userId && meta_user_id) {
+            try {
+                const authUserResponse = await supabaseAdmin.auth.admin.getUserById(userId);
+                const existingMetadata = authUserResponse.data.user?.user_metadata ?? {};
+
+                await supabaseAdmin.auth.admin.updateUserById(userId, {
+                    user_metadata: {
+                        ...existingMetadata,
+                        meta_user_id,
+                    },
+                });
+            } catch (metadataErr) {
+                console.warn('[Suscripta] Could not persist Meta user ID in auth metadata:', metadataErr);
+            }
+        }
 
         // 2) Upsert the connection data. We use the Admin Client because 
         // storing secrets bypassing RLS restrictions.

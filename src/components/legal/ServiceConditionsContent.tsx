@@ -180,6 +180,9 @@ export default function ServiceConditionsContent({
         <div className="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-8 text-sm text-zinc-500 md:flex-row md:items-center md:justify-between">
           <p>(c) {new Date().getFullYear()} Suscripta Inc.</p>
           <div className="flex gap-5">
+            <Link href="/data-deletion" className="transition-colors hover:text-white">
+              Eliminacion de Datos
+            </Link>
             <Link href="/service-conditions" className="transition-colors hover:text-white">
               Condiciones del Servicio
             </Link>
