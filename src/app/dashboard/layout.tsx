@@ -3,11 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { logout } from '@/app/actions/auth';
 
 const NAV_ITEMS = [
     { href: '/dashboard', label: 'Inicio' },
     { href: '/dashboard/conversations', label: 'Conversaciones' },
     { href: '/dashboard/templates', label: 'Plantillas' },
+    { href: '/dashboard/clients', label: 'Importar Clientes' },
     { href: '/dashboard/contacts', label: 'Contactos' },
     { href: '/dashboard/campaigns', label: 'Envios' },
     { href: '/dashboard/review', label: 'App Review' },
@@ -94,7 +96,19 @@ export default function DashboardLayout({
                 <div className="mt-auto rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
                     <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--dashboard-muted)]">Workspace</p>
                     <p className="mt-3 text-base font-semibold text-[color:var(--dashboard-text)]">Usuario Prueba</p>
-                    <p className="mt-1 text-sm text-[color:var(--dashboard-muted)]">MVP privado para demo y App Review</p>
+                    <p className="mt-1 text-sm text-[color:var(--dashboard-muted)] mb-4">MVP privado para demo y App Review</p>
+                    
+                    <button 
+                        onClick={() => logout()}
+                        className="w-full py-2.5 px-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 mt-4"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                        Cerrar Sesión
+                    </button>
                 </div>
             </aside>
 
