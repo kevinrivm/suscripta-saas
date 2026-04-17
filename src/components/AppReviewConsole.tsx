@@ -4,6 +4,7 @@ import { startTransition, useCallback, useEffect, useMemo, useState } from 'reac
 import { EmbeddedSignupButton } from '@/components/EmbeddedSignupButton';
 import {
     createWhatsAppTemplate,
+    getWhatsAppMessageEventStatus,
     getWhatsAppReviewBundle,
     sendWhatsAppTestTemplate,
 } from '@/app/actions/whatsapp';
@@ -68,6 +69,18 @@ const EMPTY_REVIEW_BUNDLE: ReviewBundle = {
     recentMessageEvents: [],
 };
 
+const FINAL_MESSAGE_STATUSES = new Set(['delivered', 'read', 'failed']);
+
+function formatMessageStatusLabel(status: string) {
+    const normalized = status.trim().toLowerCase();
+
+    if (!normalized) {
+        return 'unknown';
+    }
+
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
 export function AppReviewConsole() {
     const [bundle, setBundle] = useState<ReviewBundle>(EMPTY_REVIEW_BUNDLE);
     const [isLoading, setIsLoading] = useState(true);
@@ -84,6 +97,7 @@ export function AppReviewConsole() {
     const [newTemplateLanguage, setNewTemplateLanguage] = useState('en_US');
     const [newTemplateCategory, setNewTemplateCategory] = useState<'UTILITY' | 'MARKETING' | 'AUTHENTICATION'>('UTILITY');
     const [newTemplateBody, setNewTemplateBody] = useState('Hello {{1}}, this is a payment reminder from Suscripta. Your subscription renews in {{2}} days. Please complete payment here: {{3}} today.');
+    const [pendingMessageId, setPendingMessageId] = useState<string | null>(null);
     const approvedTemplates = useMemo(
         () => bundle.templates.filter((template) => template.status.toUpperCase() === 'APPROVED'),
         [bundle.templates]
@@ -115,6 +129,77 @@ export function AppReviewConsole() {
     useEffect(() => {
         void refreshBundle();
     }, [refreshBundle]);
+
+    useEffect(() => {
+        if (!pendingMessageId) {
+            return;
+        }
+
+        let isCancelled = false;
+        let attempts = 0;
+
+        const pollMessageStatus = async () => {
+            try {
+                const response = await getWhatsAppMessageEventStatus(pendingMessageId);
+
+                if (isCancelled || !response.event) {
+                    return;
+                }
+
+                const latestStatus = response.event.status.toLowerCase();
+
+                if (FINAL_MESSAGE_STATUSES.has(latestStatus)) {
+                    if (latestStatus === 'failed') {
+                        setError(
+                            `Meta accepted the request first, but the final delivery failed${response.event.errorCode ? ` (${response.event.errorCode})` : ''}${response.event.errorMessage ? `: ${response.event.errorMessage}` : '.'}`
+                        );
+                        setSendResult(null);
+                    } else {
+                        setSendResult(
+                            `Template delivery ${formatMessageStatusLabel(response.event.status)} for ${response.event.recipientPhone ?? 'the recipient'}. Meta message ID: ${response.event.messageId}.`
+                        );
+                        setError(null);
+                    }
+
+                    setPendingMessageId(null);
+                    startTransition(() => {
+                        void refreshBundle();
+                    });
+                }
+            } catch (pollError) {
+                if (!isCancelled) {
+                    setError(pollError instanceof Error ? pollError.message : 'Could not refresh the final WhatsApp message status.');
+                    setPendingMessageId(null);
+                }
+            }
+        };
+
+        const intervalId = window.setInterval(() => {
+            attempts += 1;
+
+            if (attempts > 10) {
+                window.clearInterval(intervalId);
+                if (!isCancelled) {
+                    setPendingMessageId(null);
+                    setSendResult((currentMessage) =>
+                        currentMessage
+                            ? `${currentMessage} The final delivery status is still pending.`
+                            : currentMessage
+                    );
+                }
+                return;
+            }
+
+            void pollMessageStatus();
+        }, 3000);
+
+        void pollMessageStatus();
+
+        return () => {
+            isCancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [pendingMessageId, refreshBundle]);
 
     const handleTemplateChange = (nextTemplateName: string) => {
         setTemplateName(nextTemplateName);
@@ -176,8 +261,12 @@ export function AppReviewConsole() {
             }
 
             setSendResult(
-                `Template ${result.templateName} was accepted by Meta for ${result.recipientWaId}. This does not confirm delivery yet. Meta message ID: ${result.messageId ?? 'unavailable'}. Check the latest message status in the product after the webhook updates.`
+                `Template ${result.templateName} was accepted by Meta for ${result.recipientWaId}. Waiting for the final delivery status... Meta message ID: ${result.messageId ?? 'unavailable'}.`
             );
+
+            if (result.messageId) {
+                setPendingMessageId(result.messageId);
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Meta message send failed.');
         } finally {

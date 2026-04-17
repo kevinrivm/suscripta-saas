@@ -76,6 +76,21 @@ interface SendTextMessageInput {
     bodyText: string;
 }
 
+interface MessageEventStatusResult {
+    ok: true;
+    event: {
+        messageId: string;
+        status: string;
+        direction?: string | null;
+        recipientPhone?: string | null;
+        templateName?: string | null;
+        messageText?: string | null;
+        errorCode?: string | null;
+        errorMessage?: string | null;
+        updatedAt?: string | null;
+    } | null;
+}
+
 interface CreateTemplateInput {
     name: string;
     language: string;
@@ -428,6 +443,60 @@ export async function getWhatsAppWorkspaceBundle(
             errorMessage: event.error_message ?? null,
             updatedAt: event.updated_at ?? null,
         })),
+    };
+}
+
+export async function getWhatsAppMessageEventStatus(messageId: string): Promise<MessageEventStatusResult> {
+    const normalizedMessageId = messageId.trim();
+
+    if (!normalizedMessageId) {
+        return {
+            ok: true,
+            event: null,
+        };
+    }
+
+    const connection = await getStoredConnection();
+
+    if (!connection) {
+        return {
+            ok: true,
+            event: null,
+        };
+    }
+
+    const supabaseAdmin = await createAdminClient();
+    const { data, error } = await supabaseAdmin
+        .from('whatsapp_message_events')
+        .select('message_id,status,direction,recipient_phone,template_name,message_text,error_code,error_message,updated_at')
+        .eq('phone_number_id', connection.phone_number_id)
+        .eq('message_id', normalizedMessageId)
+        .maybeSingle();
+
+    if (error) {
+        throw new Error(buildWhatsAppEventsSchemaErrorMessage(error.message));
+    }
+
+    if (!data) {
+        return {
+            ok: true,
+            event: null,
+        };
+    }
+
+    return {
+        ok: true,
+        event: {
+            messageId: data.message_id,
+            status: data.status,
+            direction: data.direction ?? null,
+            recipientPhone: data.recipient_phone ?? null,
+            templateName: data.template_name ?? null,
+            messageText: data.message_text ?? null,
+            errorCode: data.error_code ?? null,
+            errorMessage: data.error_message ?? null,
+            updatedAt: data.updated_at ?? null,
+        },
     };
 }
 

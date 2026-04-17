@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { sendWhatsAppTestTemplate } from '@/app/actions/whatsapp';
+import { useEffect, useMemo, useState } from 'react';
+import { getWhatsAppMessageEventStatus, sendWhatsAppTestTemplate } from '@/app/actions/whatsapp';
 
 type ApprovedTemplate = {
     id: string;
@@ -20,6 +20,18 @@ interface CampaignComposerProps {
     connectedNumber?: string | null;
     approvedTemplates: ApprovedTemplate[];
     recentRecipients: RecentRecipient[];
+}
+
+const FINAL_MESSAGE_STATUSES = new Set(['delivered', 'read', 'failed']);
+
+function formatMessageStatusLabel(status: string) {
+    const normalized = status.trim().toLowerCase();
+
+    if (!normalized) {
+        return 'unknown';
+    }
+
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 function extractTemplateVariableCount(bodyText: string) {
@@ -46,6 +58,7 @@ export function CampaignComposer({
     const [isSending, setIsSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [result, setResult] = useState<string | null>(null);
+    const [pendingMessageId, setPendingMessageId] = useState<string | null>(null);
 
     const selectedTemplate = useMemo(
         () => approvedTemplates.find((template) => template.name === templateName) ?? approvedTemplates[0] ?? null,
@@ -55,6 +68,74 @@ export function CampaignComposer({
     const expectedVariableCount = selectedTemplate
         ? extractTemplateVariableCount(selectedTemplate.bodyText)
         : 0;
+
+    useEffect(() => {
+        if (!pendingMessageId) {
+            return;
+        }
+
+        let isCancelled = false;
+        let attempts = 0;
+
+        const pollMessageStatus = async () => {
+            try {
+                const response = await getWhatsAppMessageEventStatus(pendingMessageId);
+
+                if (isCancelled || !response.event) {
+                    return;
+                }
+
+                const latestStatus = response.event.status.toLowerCase();
+
+                if (FINAL_MESSAGE_STATUSES.has(latestStatus)) {
+                    if (latestStatus === 'failed') {
+                        setError(
+                            `Meta accepted the request first, but the final delivery failed${response.event.errorCode ? ` (${response.event.errorCode})` : ''}${response.event.errorMessage ? `: ${response.event.errorMessage}` : '.'}`
+                        );
+                        setResult(null);
+                    } else {
+                        setResult(
+                            `Estado final: ${formatMessageStatusLabel(response.event.status)} para ${response.event.recipientPhone ?? 'el destinatario'}. Message ID: ${response.event.messageId}.`
+                        );
+                        setError(null);
+                    }
+
+                    setPendingMessageId(null);
+                }
+            } catch (pollError) {
+                if (!isCancelled) {
+                    setError(pollError instanceof Error ? pollError.message : 'No se pudo consultar el estado final del mensaje.');
+                    setPendingMessageId(null);
+                }
+            }
+        };
+
+        const intervalId = window.setInterval(() => {
+            attempts += 1;
+
+            if (attempts > 10) {
+                window.clearInterval(intervalId);
+                if (!isCancelled) {
+                    setPendingMessageId(null);
+                    setResult((currentMessage) =>
+                        currentMessage
+                            ? `${currentMessage} El estado final sigue pendiente.`
+                            : currentMessage
+                    );
+                }
+                return;
+            }
+
+            void pollMessageStatus();
+        }, 3000);
+
+        void pollMessageStatus();
+
+        return () => {
+            isCancelled = true;
+            window.clearInterval(intervalId);
+        };
+    }, [pendingMessageId]);
 
     async function handleSend() {
         setIsSending(true);
@@ -75,8 +156,12 @@ export function CampaignComposer({
             }
 
             setResult(
-                `Meta acepto el mensaje para ${response.recipientWaId}, pero eso no confirma entrega. Message ID: ${response.messageId ?? 'unavailable'}. Revisa el estado final en Conversaciones o Actividad reciente despues del webhook.`
+                `Meta acepto el mensaje para ${response.recipientWaId}. Esperando estado final de entrega... Message ID: ${response.messageId ?? 'unavailable'}.`
             );
+
+            if (response.messageId) {
+                setPendingMessageId(response.messageId);
+            }
         } catch (requestError) {
             setError(requestError instanceof Error ? requestError.message : 'No se pudo enviar el recordatorio.');
         } finally {
