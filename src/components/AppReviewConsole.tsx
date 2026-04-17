@@ -176,7 +176,7 @@ export function AppReviewConsole() {
             }
 
             setSendResult(
-                `Template ${result.templateName} sent successfully to ${result.recipientWaId}. Meta message ID: ${result.messageId ?? 'unavailable'}.`
+                `Template ${result.templateName} was accepted by Meta for ${result.recipientWaId}. This does not confirm delivery yet. Meta message ID: ${result.messageId ?? 'unavailable'}. Check the latest message status in the product after the webhook updates.`
             );
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Meta message send failed.');
@@ -510,7 +510,7 @@ export function AppReviewConsole() {
                     </div>
 
                     {sendResult && (
-                        <div className="mt-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                        <div className="mt-5 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
                             {sendResult}
                         </div>
                     )}

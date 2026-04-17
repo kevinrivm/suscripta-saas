@@ -27,6 +27,19 @@ interface CustomerInsertInput {
     nextPaymentDate?: string | null;
 }
 
+type CustomerUpsertRow = {
+    user_id: string;
+    phone_number: string;
+    first_name: string;
+    last_name_1: string | null;
+    last_name_2: string | null;
+    deleted_at: string | null;
+    is_active: boolean;
+    inactive_at: string | null;
+    billing_cycle?: string | null;
+    next_payment_date?: string | null;
+};
+
 export async function uploadCustomersBatch(customers: CustomerInsertInput[], mode: 'append' | 'overwrite' = 'append') {
     try {
         const supabase = await createClient();
@@ -42,8 +55,8 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
         }
 
         // Formatear payload para la base de datos
-        const payload = customers.map((c) => {
-            const row: any = {
+        const payload = customers.map((c): CustomerUpsertRow => {
+            const row: CustomerUpsertRow = {
                 user_id: user.id,
                 phone_number: c.phoneNumber,
                 first_name: c.firstName,
@@ -119,7 +132,10 @@ export async function updateCustomerCycle(customerId: string, billingCycle: stri
     try {
         const supabase = await createClient();
         
-        const payload: any = { billing_cycle: billingCycle };
+        const payload: { billing_cycle: string; next_payment_date: string | null } = {
+            billing_cycle: billingCycle,
+            next_payment_date: null
+        };
         payload.next_payment_date = nextPaymentDate || null; // Permite vaciar la fecha enviando null
 
         const { error } = await supabase
@@ -150,7 +166,7 @@ export async function softDeleteCustomer(customerId: string) {
         
         if (error) return { ok: false, error: error.message };
         return { ok: true };
-    } catch (e) {
+    } catch {
         return { ok: false, error: 'Error al enviar a papelera.' };
     }
 }
@@ -170,7 +186,7 @@ export async function toggleCustomerActiveStatus(customerId: string, makeActive:
         
         if (error) return { ok: false, error: error.message };
         return { ok: true };
-    } catch (e) {
+    } catch {
         return { ok: false, error: 'Error al cambiar estado de actividad.' };
     }
 }

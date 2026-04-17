@@ -134,7 +134,7 @@ export default async function DashboardOverviewPage() {
               <p className="text-xs uppercase tracking-[0.16em] text-zinc-500 transition-colors group-hover:text-emerald-400">Entregas / lecturas</p>
               <p className="mt-4 text-4xl font-semibold text-white">{metrics.delivered}</p>
               <p className="mt-2 text-sm text-zinc-400">
-                {metrics.sent} sent aceptados recientemente.
+                {metrics.sent} envios aceptados por Meta recientemente.
               </p>
             </div>
           </div>
@@ -191,7 +191,7 @@ export default async function DashboardOverviewPage() {
                 </svg>
               </h3>
               <p className="mt-2 text-sm leading-6 text-zinc-400">
-                Dispara el reminder desde aqui hacia tu app de Meta.
+                Dispara el reminder desde aqui y luego valida si quedo entregado o fallo en la actividad reciente.
               </p>
             </div>
           </div>

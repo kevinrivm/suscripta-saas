@@ -75,7 +75,7 @@ export function CampaignComposer({
             }
 
             setResult(
-                `Mensaje aceptado por Meta para ${response.recipientWaId}. Message ID: ${response.messageId ?? 'unavailable'}.`
+                `Meta acepto el mensaje para ${response.recipientWaId}, pero eso no confirma entrega. Message ID: ${response.messageId ?? 'unavailable'}. Revisa el estado final en Conversaciones o Actividad reciente despues del webhook.`
             );
         } catch (requestError) {
             setError(requestError instanceof Error ? requestError.message : 'No se pudo enviar el recordatorio.');
@@ -185,7 +185,7 @@ export function CampaignComposer({
                 </div>
 
                 {result ? (
-                    <div className="mt-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+                    <div className="mt-5 rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
                         {result}
                     </div>
                 ) : null}

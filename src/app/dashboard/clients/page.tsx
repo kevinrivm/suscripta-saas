@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { useDropzone, FileRejection, DropEvent } from 'react-dropzone';
+import React, { useState, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { parsePhoneNumber, isValidPhoneNumber, CountryCode } from 'libphonenumber-js';
+import { parsePhoneNumber, CountryCode } from 'libphonenumber-js';
 import { uploadCustomersBatch } from '@/app/actions/customers';
 
 // ====== ICÓNS SVGs (In-line para mantener integridad gráfica) ======
@@ -66,6 +66,9 @@ interface PreviewRow {
   edited: boolean;
 }
 
+type CsvCell = string | number | boolean | Date | null | undefined;
+type CsvRow = Record<string, CsvCell>;
+
 // Lista simple de países populares para la demostración (en producción podría venir de una lib).
 const COMMON_COUNTRIES: { code: string, label: string }[] = [
   { code: 'MX', label: '🇲🇽 México (+52)' },
@@ -88,7 +91,7 @@ export default function ClientsUploadPage() {
 
   // File Parsing State
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
-  const [csvData, setCsvData] = useState<any[]>([]);
+  const [csvData, setCsvData] = useState<CsvRow[]>([]);
   const [fileName, setFileName] = useState('');
 
   // Mapping State
@@ -106,6 +109,8 @@ export default function ClientsUploadPage() {
   const [defaultCountry, setDefaultCountry] = useState<CountryCode>('MX');
   const [importStats, setImportStats] = useState({ success: 0, failed: 0 });
 
+  const toDisplayString = (value: CsvCell) => value == null ? '' : String(value);
+
   // ====== PASO 1: UPLOAD (Drag & Drop) ======
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -114,7 +119,7 @@ export default function ClientsUploadPage() {
     setFileName(file.name);
     setProcessing(true);
 
-    const performAutoMapping = (data: any[], headers: string[]) => {
+    const performAutoMapping = (data: CsvRow[], headers: string[]) => {
       setCsvHeaders(headers);
       setCsvData(data);
 
@@ -136,13 +141,13 @@ export default function ClientsUploadPage() {
 
     if (isExcel) {
       const reader = new FileReader();
-      reader.onload = (e) => {
+      reader.onload = (event) => {
         try {
-          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const data = new Uint8Array(event.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array', cellDates: true });
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+          const json = XLSX.utils.sheet_to_json<CsvRow>(worksheet, { defval: '' });
 
           if (json.length > 0) {
             const headers = Object.keys(json[0] as object);
@@ -160,7 +165,7 @@ export default function ClientsUploadPage() {
       reader.readAsArrayBuffer(file);
     } else {
       // Es CSV
-      Papa.parse(file, {
+      Papa.parse<CsvRow>(file, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
@@ -198,7 +203,7 @@ export default function ClientsUploadPage() {
 
     // Pre-validación de formatos incompatibles
     let localFormatError = null;
-    for (let row of csvData) {
+    for (const row of csvData) {
       const phoneVal = row[mapping.phone!];
       if (phoneVal && /[a-zA-Z]{4,}/.test(String(phoneVal))) {
         localFormatError = `La columna de Teléfono contiene demasiado texto ("${phoneVal}"). Edita tu archivo y asegúrate de que sean números validos.`;
@@ -222,7 +227,7 @@ export default function ClientsUploadPage() {
 
     // Procesar rows usando libphonenumber
     const processedRows: PreviewRow[] = csvData.map((row, index) => {
-      const phoneRawStr = row[mapping.phone!] || '';
+      const phoneRawStr = toDisplayString(row[mapping.phone!]);
       let valid = false;
       let formattedPhone = '';
 
@@ -233,18 +238,18 @@ export default function ClientsUploadPage() {
           valid = true;
           formattedPhone = phoneNumber.format('E.164');
         }
-      } catch (e) {
+      } catch {
         // Formatting err, valid=false
       }
 
       return {
         _id: `row-${index}`,
         phoneRaw: phoneRawStr,
-        firstName: row[mapping.firstName!] || '',
-        lastName1: mapping.lastName1 ? (row[mapping.lastName1] || '') : '',
-        lastName2: mapping.lastName2 ? (row[mapping.lastName2] || '') : '',
-        billingCycleRaw: mapping.billingCycle ? (row[mapping.billingCycle] || '') : '',
-        nextPaymentDateRaw: mapping.nextPaymentDate ? (row[mapping.nextPaymentDate] || '') : '',
+        firstName: toDisplayString(row[mapping.firstName!]),
+        lastName1: mapping.lastName1 ? toDisplayString(row[mapping.lastName1]) : '',
+        lastName2: mapping.lastName2 ? toDisplayString(row[mapping.lastName2]) : '',
+        billingCycleRaw: mapping.billingCycle ? toDisplayString(row[mapping.billingCycle]) : '',
+        nextPaymentDateRaw: mapping.nextPaymentDate ? toDisplayString(row[mapping.nextPaymentDate]) : '',
         isValid: valid,
         phoneE164: formattedPhone,
         edited: false
@@ -275,7 +280,7 @@ export default function ClientsUploadPage() {
           valid = true;
           formattedPhone = phoneNumber.format('E.164');
         }
-      } catch (e) {
+      } catch {
         // error = ignore
       }
 
@@ -305,7 +310,7 @@ export default function ClientsUploadPage() {
           valid = true;
           formattedPhone = phoneNumber.format('E.164');
         }
-      } catch (e) { }
+      } catch {}
       return { ...row, isValid: valid, phoneE164: formattedPhone };
     }));
   };
@@ -473,7 +478,7 @@ export default function ClientsUploadPage() {
                   </label>
                   <select
                     className="w-full sm:w-80 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
-                    value={(mapping as any)[f.key] || ''}
+                    value={mapping[f.key as keyof HeaderMapping] || ''}
                     onChange={(e) => setMapping(p => ({ ...p, [f.key as keyof HeaderMapping]: e.target.value || null }))}
                   >
                     <option value="">-- Ignorar (No importar) --</option>
