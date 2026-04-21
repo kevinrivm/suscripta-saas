@@ -62,8 +62,10 @@ interface PreviewRow {
 
   // Validation flags
   phoneE164: string;
+  phoneIntl: string;
   isValid: boolean;
   edited: boolean;
+  wasAutoFilled: boolean;
 }
 
 // Lista simple de países populares para la demostración (en producción podría venir de una lib).
@@ -105,6 +107,25 @@ export default function ClientsUploadPage() {
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [defaultCountry, setDefaultCountry] = useState<CountryCode>('MX');
   const [importStats, setImportStats] = useState({ success: 0, failed: 0 });
+  const [showAutoFillWarning, setShowAutoFillWarning] = useState(false);
+
+  // Funciones de limpieza de números
+  const cleanPhoneNumber = (raw: string) => {
+    let c = String(raw).replace(/[^\d+]/g, '');
+    
+    // Fix viejas ladas mexicanas (+521 o 521)
+    if (c.startsWith('+521') && c.length === 14) c = '+52' + c.slice(4);
+    else if (c.startsWith('521') && c.length === 13) c = '52' + c.slice(3);
+    
+    // Fix doble 52 (mucha gente pone 5252 al importar)
+    if (c.startsWith('+5252')) c = '+52' + c.slice(5);
+    else if (c.startsWith('5252')) c = '52' + c.slice(4);
+
+    // Forzar el + si claramente pusieron la lada (12 dígitos para MX)
+    if (c.startsWith('52') && c.length === 12 && !c.startsWith('+')) c = '+' + c;
+
+    return c;
+  };
 
   // ====== PASO 1: UPLOAD (Drag & Drop) ======
   const onDrop = useCallback((acceptedFiles: File[]) => {
@@ -221,17 +242,29 @@ export default function ClientsUploadPage() {
     }
 
     // Procesar rows usando libphonenumber
+    let anyAutoFilled = false;
+
     const processedRows: PreviewRow[] = csvData.map((row, index) => {
-      const phoneRawStr = row[mapping.phone!] || '';
+      const phoneRawStr = String(row[mapping.phone!] || '');
+      const cleaned = cleanPhoneNumber(phoneRawStr);
       let valid = false;
-      let formattedPhone = '';
+      let formattedPhoneE164 = '';
+      let formattedPhoneIntl = '';
+      let autoFilled = false;
 
       try {
         // Parseamos con el país por defecto seleccionado globalmente.
-        const phoneNumber = parsePhoneNumber(phoneRawStr, defaultCountry);
+        const phoneNumber = parsePhoneNumber(cleaned, defaultCountry);
         if (phoneNumber && phoneNumber.isValid()) {
           valid = true;
-          formattedPhone = phoneNumber.format('E.164');
+          formattedPhoneE164 = phoneNumber.format('E.164');
+          formattedPhoneIntl = phoneNumber.formatInternational();
+          
+          // Detectar inferencia
+          if (!phoneRawStr.includes('+') && !cleaned.startsWith(String(phoneNumber.countryCallingCode))) {
+             autoFilled = true;
+             anyAutoFilled = true;
+          }
         }
       } catch (e) {
         // Formatting err, valid=false
@@ -246,10 +279,14 @@ export default function ClientsUploadPage() {
         billingCycleRaw: mapping.billingCycle ? (row[mapping.billingCycle] || '') : '',
         nextPaymentDateRaw: mapping.nextPaymentDate ? (row[mapping.nextPaymentDate] || '') : '',
         isValid: valid,
-        phoneE164: formattedPhone,
-        edited: false
+        phoneE164: formattedPhoneE164,
+        phoneIntl: formattedPhoneIntl,
+        edited: false,
+        wasAutoFilled: autoFilled
       };
     });
+
+    if(anyAutoFilled) setShowAutoFillWarning(true);
 
     // Filtrar filas completadas vacías (donde nombre y teléfono están vacíos)
     const validContentRows = processedRows.filter(r => r.phoneRaw.trim() !== '' || r.firstName.trim() !== '');
@@ -266,14 +303,17 @@ export default function ClientsUploadPage() {
     setRows(prevRows => prevRows.map(row => {
       if (row._id !== id) return row;
 
+      const cleaned = cleanPhoneNumber(newRawValue);
       let valid = false;
-      let formattedPhone = '';
+      let formattedPhoneE164 = '';
+      let formattedPhoneIntl = '';
 
       try {
-        const phoneNumber = parsePhoneNumber(newRawValue, defaultCountry);
+        const phoneNumber = parsePhoneNumber(cleaned, defaultCountry);
         if (phoneNumber && phoneNumber.isValid()) {
           valid = true;
-          formattedPhone = phoneNumber.format('E.164');
+          formattedPhoneE164 = phoneNumber.format('E.164');
+          formattedPhoneIntl = phoneNumber.formatInternational();
         }
       } catch (e) {
         // error = ignore
@@ -283,8 +323,10 @@ export default function ClientsUploadPage() {
         ...row,
         phoneRaw: newRawValue,
         isValid: valid,
-        phoneE164: formattedPhone,
-        edited: true
+        phoneE164: formattedPhoneE164,
+        phoneIntl: formattedPhoneIntl,
+        edited: true,
+        wasAutoFilled: false // Al editar asume que él sabe el código
       };
     }));
   };
@@ -295,19 +337,29 @@ export default function ClientsUploadPage() {
 
   const handleCountryChange = (newCountry: CountryCode) => {
     setDefaultCountry(newCountry);
+    let anyAutoFilled = false;
     // Reprocesar todas las filas con el nuevo país
     setRows(prevRows => prevRows.map(row => {
+      const cleaned = cleanPhoneNumber(row.phoneRaw);
       let valid = false;
-      let formattedPhone = '';
+      let formattedPhoneE164 = '';
+      let formattedPhoneIntl = '';
+      let autoFilled = false;
       try {
-        const phoneNumber = parsePhoneNumber(row.phoneRaw, newCountry);
+        const phoneNumber = parsePhoneNumber(cleaned, newCountry);
         if (phoneNumber && phoneNumber.isValid()) {
           valid = true;
-          formattedPhone = phoneNumber.format('E.164');
+          formattedPhoneE164 = phoneNumber.format('E.164');
+          formattedPhoneIntl = phoneNumber.formatInternational();
+          if (!row.phoneRaw.includes('+') && !cleaned.startsWith(String(phoneNumber.countryCallingCode))) {
+             autoFilled = true;
+             anyAutoFilled = true;
+          }
         }
       } catch (e) { }
-      return { ...row, isValid: valid, phoneE164: formattedPhone };
+      return { ...row, isValid: valid, phoneE164: formattedPhoneE164, phoneIntl: formattedPhoneIntl, wasAutoFilled: autoFilled };
     }));
+    setShowAutoFillWarning(anyAutoFilled);
   };
 
   const validCount = rows.filter(r => r.isValid).length;
@@ -340,7 +392,7 @@ export default function ClientsUploadPage() {
 
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-8 py-8 animate-in fade-in zoom-in-95 duration-500">
+    <div className="mx-auto w-full max-w-7xl px-6 py-8 animate-in fade-in zoom-in-95 duration-500">
       {/* Header del Módulo */}
       <div className="mb-8">
         <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300 mb-4">
@@ -452,8 +504,22 @@ export default function ClientsUploadPage() {
               <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-6 flex items-start gap-4">
                 <div className="mt-0.5 w-6 h-6 flex items-center justify-center text-red-500 bg-red-500/20 rounded-full">!</div>
                 <div>
-                  <h4 className="text-red-400 font-semibold text-sm mb-1">Error de Formato Prevío</h4>
+                  <h4 className="text-red-400 font-semibold text-sm mb-1">Error de Formato Previo</h4>
                   <p className="text-xs text-red-300/80 leading-relaxed">{formatError}</p>
+                </div>
+              </div>
+            )}
+
+            {(!mapping.billingCycle || !mapping.nextPaymentDate) && (
+              <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl mb-8 flex items-start gap-4 shadow-[0_4px_20px_rgba(59,130,246,0.1)]">
+                <div className="mt-0.5 w-6 h-6 flex items-center justify-center text-blue-400 bg-blue-500/20 rounded-full shrink-0">i</div>
+                <div>
+                   <h4 className="text-blue-400 font-semibold text-sm mb-1">Configuración de Recordatorios</h4>
+                   <p className="text-xs text-blue-300/80 leading-relaxed">
+                     Parece que no has mapeado el <strong>Ciclo de Cobro</strong> o la <strong>Fecha de Pago</strong>. 
+                     Estos campos son fundamentales para que el sistema pueda programar y enviar recordatorios automáticos de pago a tus clientes. 
+                     Si los dejas vacíos, tendrás que configurarlos manualmente después.
+                   </p>
                 </div>
               </div>
             )}
@@ -522,6 +588,27 @@ export default function ClientsUploadPage() {
               </div>
             </div>
 
+            {/* AutoFill Warning */}
+            {showAutoFillWarning && (
+              <div className="bg-[#1a1708] border border-yellow-500/30 p-5 rounded-2xl mb-6 flex items-start gap-4 animate-in slide-in-from-top-2 shadow-[0_10px_30px_rgba(234,179,8,0.1)]">
+                <div className="mt-0.5 w-7 h-7 flex items-center justify-center text-yellow-500 bg-yellow-500/20 rounded-full shrink-0 font-bold border border-yellow-500/30">!</div>
+                <div>
+                  <h4 className="text-yellow-500 font-semibold text-sm mb-1.5">Códigos de País Inferidos</h4>
+                  <p className="text-sm text-yellow-500/80 leading-relaxed font-medium">
+                    Hemos detectado números "locales" en tu Excel que no tenían código internacional (como +52 o +1). 
+                    El sistema ha utilizado el <strong>País Base seleccionado</strong> arriba para unificarlos.
+                    Si algún número pertenece a otro país, asigńale su código local en la columna de revisión.
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setShowAutoFillWarning(false)} 
+                  className="ml-auto flex items-center shrink-0 justify-center text-yellow-600 hover:text-yellow-400 font-medium text-xs px-3 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 rounded-lg transition-colors border border-yellow-500/20"
+                >
+                  Entendido
+                </button>
+              </div>
+            )}
+
             {/* Top Action Bar */}
             <div className="flex items-center gap-4 p-4 rounded-2xl bg-black/20 border border-white/5 mb-6">
               <div className="flex items-center gap-2 px-3 border-r border-white/10">
@@ -552,15 +639,18 @@ export default function ClientsUploadPage() {
                   <tr>
                     <th className="px-6 py-4 font-medium">Estado</th>
                     <th className="px-6 py-4 font-medium">Nombre Completo</th>
-                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.02]">
-                      Teléfono Crudo (Edita aquí)
-                    </th>
-                    <th className="px-6 py-4 font-medium border-l border-white/5">
-                      E.164 (Sistema Meta)
-                    </th>
-                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
-                      Ciclo / Pago
-                    </th>
+                      <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.02]">
+                        Teléfono Crudo (CSV)
+                      </th>
+                      <th className="px-6 py-4 font-medium border-l border-white/5">
+                        E.164 (Sistema Meta)
+                      </th>
+                      <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
+                        CICLO (FRECUENCIA)
+                      </th>
+                      <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
+                        FECHA DE PAGO
+                      </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -586,15 +676,34 @@ export default function ClientsUploadPage() {
                           type="text"
                           value={row.phoneRaw}
                           onChange={(e) => handlePhoneEdit(row._id, e.target.value)}
-                          className={`bg-transparent w-full border-b border-transparent focus:border-white/50 focus:outline-none transition-colors px-1 py-1 ${!row.isValid ? 'text-red-300 font-semibold' : 'text-zinc-300'}`}
-                          placeholder="Ingresa número"
+                          className={`bg-transparent w-full border-b border-transparent focus:border-white/50 focus:outline-none transition-colors px-1 py-1 text-sm ${!row.isValid ? 'text-red-300 font-semibold' : 'text-zinc-300'}`}
+                          placeholder="Número"
                         />
                       </td>
-                      <td className="px-6 py-4 border-l border-white/5 font-mono text-xs text-zinc-500">
-                        {row.isValid ? row.phoneE164 : '-'}
+                      <td className="px-6 py-4 border-l border-white/5 font-mono text-xs">
+                        {row.isValid ? (
+                          <div className="flex items-center gap-2">
+                            {row.wasAutoFilled && (
+                               <span title="Código Inferido Automáticamente" className="w-2 h-2 rounded-full bg-yellow-500 shrink-0 animate-pulse shadow-[0_0_8px_rgba(234,179,8,0.8)]"></span>
+                            )}
+                            <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-md font-bold text-xs tracking-wide border border-emerald-500/20 shrink-0">
+                              {row.phoneIntl.split(' ')[0]}
+                            </span>
+                            <span className="text-zinc-300 tracking-wider font-semibold text-sm">
+                              {row.phoneIntl.split(' ').slice(1).join(' ')}
+                            </span>
+                          </div>
+                        ) : <span className="text-zinc-600 font-sans">-</span>}
                       </td>
-                      <td className="px-6 py-4 border-l border-white/5 text-xs text-zinc-400 italic">
-                        {row.billingCycleRaw || 'Defaults'} / {row.nextPaymentDateRaw || '---'}
+                      <td className="px-6 py-4 border-l border-white/5 text-sm text-zinc-300 font-medium">
+                        {row.billingCycleRaw || (
+                          <span className="text-zinc-600 italic">No detectado</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 border-l border-white/5 text-sm text-zinc-300 font-medium">
+                        {row.nextPaymentDateRaw || (
+                          <span className="text-zinc-600 italic">No detectado</span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -603,7 +712,26 @@ export default function ClientsUploadPage() {
             </div>
 
             {/* Submit Button */}
-            <div className="mt-8 flex justify-end">
+            <div className="mt-8 flex justify-end gap-4">
+              <button
+                onClick={() => {
+                  setStep('UPLOAD');
+                  setRows([]);
+                  setCsvData([]);
+                  setMapping({
+                    phone: null,
+                    firstName: null,
+                    lastName1: null,
+                    lastName2: null,
+                    billingCycle: null,
+                    nextPaymentDate: null
+                  });
+                }}
+                disabled={processing}
+                className="px-8 py-3 rounded-full text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Cancelar y Salir
+              </button>
               <button
                 onClick={handleImport}
                 disabled={processing || validCount === 0 || errorCount > 0}

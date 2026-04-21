@@ -186,6 +186,7 @@ CREATE TABLE IF NOT EXISTS public.customers (
     payment_status TEXT DEFAULT 'pending',
     billing_cycle TEXT DEFAULT 'monthly',
     next_payment_date DATE,
+    anchor_day SMALLINT CHECK (anchor_day BETWEEN 1 AND 31), -- Día fijo del mes para el anclaje de cobro
     
     -- Campos de Ciclo de Vida (Soft Delete & Pausas)
     is_active BOOLEAN DEFAULT true,

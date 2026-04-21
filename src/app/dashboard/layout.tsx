@@ -5,12 +5,23 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { logout } from '@/app/actions/auth';
 
-const NAV_ITEMS = [
+type NavItem = {
+    href: string;
+    label: string;
+    children?: { href: string; label: string }[];
+};
+
+const NAV_ITEMS: NavItem[] = [
     { href: '/dashboard', label: 'Inicio' },
     { href: '/dashboard/conversations', label: 'Conversaciones' },
     { href: '/dashboard/templates', label: 'Plantillas' },
-    { href: '/dashboard/clients', label: 'Importar Clientes' },
-    { href: '/dashboard/contacts', label: 'Contactos' },
+    {
+        href: '/dashboard/contacts',
+        label: 'Clientes',
+        children: [
+            { href: '/dashboard/clients', label: 'Carga Masiva' },
+        ],
+    },
     { href: '/dashboard/campaigns', label: 'Envios' },
     { href: '/dashboard/review', label: 'App Review' },
 ];
@@ -63,32 +74,60 @@ export default function DashboardLayout({
                     </div>
                 </div>
 
-                <nav className="space-y-2">
+                <nav className="space-y-1">
                     {NAV_ITEMS.map((item) => {
                         const isActive =
                             item.href === '/dashboard'
                                 ? pathname === item.href
                                 : pathname?.startsWith(item.href);
+                        const isChildActive = item.children?.some(c => pathname?.startsWith(c.href));
+                        const isExpanded = isActive || isChildActive;
 
                         return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={`group flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium transition ${
-                                    isActive
-                                        ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 shadow-[0_12px_30px_rgba(16,185,129,0.08)]'
-                                        : 'border border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white'
-                                }`}
-                            >
-                                <span>{item.label}</span>
-                                <span
-                                    className={`h-2.5 w-2.5 rounded-full transition ${
-                                        isActive
-                                            ? 'bg-emerald-400'
-                                            : 'bg-zinc-700 group-hover:bg-zinc-500'
+                            <div key={item.href}>
+                                <Link
+                                    href={item.href}
+                                    className={`group flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                                        isExpanded
+                                            ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 shadow-[0_12px_30px_rgba(16,185,129,0.08)]'
+                                            : 'border border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white'
                                     }`}
-                                />
-                            </Link>
+                                >
+                                    <span>{item.label}</span>
+                                    <span
+                                        className={`h-2.5 w-2.5 rounded-full transition ${
+                                            isExpanded
+                                                ? 'bg-emerald-400'
+                                                : 'bg-zinc-700 group-hover:bg-zinc-500'
+                                        }`}
+                                    />
+                                </Link>
+
+                                {/* Sub-items */}
+                                {item.children && isExpanded && (
+                                    <div className="ml-4 mt-1 space-y-1 border-l border-emerald-500/20 pl-3">
+                                        {item.children.map((child) => {
+                                            const isChildItemActive = pathname?.startsWith(child.href);
+                                            return (
+                                                <Link
+                                                    key={child.href}
+                                                    href={child.href}
+                                                    className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition ${
+                                                        isChildItemActive
+                                                            ? 'text-emerald-400 bg-emerald-500/10'
+                                                            : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
+                                                    }`}
+                                                >
+                                                    <span className="flex items-center gap-2">
+                                                        <span className={`w-1 h-1 rounded-full ${isChildItemActive ? 'bg-emerald-400' : 'bg-zinc-600'}`} />
+                                                        {child.label}
+                                                    </span>
+                                                </Link>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         );
                     })}
                 </nav>

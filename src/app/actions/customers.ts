@@ -42,6 +42,16 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
         }
 
         // Formatear payload para la base de datos
+        const CYCLE_MAP: Record<string, string> = {
+            semanal: 'weekly', quincenal: 'biweekly', 'cada 15 días': 'biweekly',
+            mensual: 'monthly', bimestral: 'bimonthly', 'cada 2 meses': 'bimonthly',
+            trimestral: 'quarterly', 'cada 3 meses': 'quarterly',
+            semestral: 'biannual', 'cada 6 meses': 'biannual',
+            anual: 'annual', 'al año': 'annual',
+            weekly: 'weekly', biweekly: 'biweekly', monthly: 'monthly',
+            bimonthly: 'bimonthly', quarterly: 'quarterly', biannual: 'biannual', annual: 'annual',
+        };
+
         const payload = customers.map((c) => {
             const row: any = {
                 user_id: user.id,
@@ -49,11 +59,15 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
                 first_name: c.firstName,
                 last_name_1: c.lastName1 || null,
                 last_name_2: c.lastName2 || null,
-                deleted_at: null, // Resurrección si estaba en papelera
+                deleted_at: null,
                 is_active: true,
                 inactive_at: null
             };
-            if (c.billingCycle) row.billing_cycle = c.billingCycle;
+            if (c.billingCycle) {
+                const normalized = CYCLE_MAP[c.billingCycle.toLowerCase().trim()];
+                // Solo guardar si el ciclo es reconocido; si no, dejar null para revisión manual
+                if (normalized) row.billing_cycle = normalized;
+            }
             if (c.nextPaymentDate) row.next_payment_date = c.nextPaymentDate;
             return row;
         });
@@ -120,7 +134,7 @@ export async function updateCustomerCycle(customerId: string, billingCycle: stri
         const supabase = await createClient();
         
         const payload: any = { billing_cycle: billingCycle };
-        payload.next_payment_date = nextPaymentDate || null; // Permite vaciar la fecha enviando null
+        payload.next_payment_date = nextPaymentDate || null;
 
         const { error } = await supabase
             .from('customers')
@@ -136,6 +150,47 @@ export async function updateCustomerCycle(customerId: string, billingCycle: stri
     } catch (error) {
         console.error('[Suscripta] Excepción actualizando ciclo', error);
         return { ok: false, error: 'Error desconocido al actualizar ciclo de facturación.' };
+    }
+}
+
+/**
+ * Reprogramar la fecha de pago de un cliente con dos modos:
+ * - 'extension': Prórroga única. Solo actualiza next_payment_date.
+ * - 'permanent': Cambio permanente. Actualiza next_payment_date Y fija anchor_day
+ *   extrayendo el día de la nueva fecha seleccionada.
+ */
+export async function reschedulePaymentDate(
+    customerId: string,
+    newDate: string,          // Formato YYYY-MM-DD
+    mode: 'extension' | 'permanent'
+) {
+    try {
+        const supabase = await createClient();
+
+        const payload: Record<string, any> = {
+            next_payment_date: newDate,
+        };
+
+        if (mode === 'permanent') {
+            // Extraer el día del mes de la nueva fecha (1-31)
+            const dayOfMonth = new Date(newDate + 'T12:00:00').getDate();
+            payload.anchor_day = dayOfMonth;
+        }
+
+        const { error } = await supabase
+            .from('customers')
+            .update(payload)
+            .eq('id', customerId);
+
+        if (error) {
+            console.error('[Suscripta] Error reprogramando fecha:', error);
+            return { ok: false, error: error.message };
+        }
+
+        return { ok: true };
+    } catch (error) {
+        console.error('[Suscripta] Excepción en reschedulePaymentDate:', error);
+        return { ok: false, error: 'Error desconocido al reprogramar fecha.' };
     }
 }
 
