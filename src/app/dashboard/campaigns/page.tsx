@@ -30,24 +30,20 @@ export default async function CampaignsPage() {
         <div className="mx-auto w-full max-w-7xl px-8 py-8">
             <div className="mb-8 flex items-end justify-between gap-6">
                 <div>
-                    <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300">
-                        Messaging MVP
-                    </span>
-                    <h1 className="mt-4 text-4xl font-semibold tracking-tight">Envios</h1>
-                    <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">
-                        Esta es la experiencia final del producto para disparar recordatorios. Ya trabaja con la
-                        plantilla real aprobada y con el numero conectado en Meta.
+                    <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Envíos</h1>
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
+                        Dispara recordatorios usando tus plantillas aprobadas y el número conectado en Meta.
                     </p>
                 </div>
 
-                <div className="grid min-w-[320px] grid-cols-2 gap-3">
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Plantillas listas</p>
-                        <p className="mt-3 text-3xl font-semibold text-white">{approvedTemplates.length}</p>
+                <div className="grid min-w-[300px] grid-cols-2 gap-3">
+                    <div className="card rounded-xl border p-4">
+                        <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Plantillas listas</p>
+                        <p className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{approvedTemplates.length}</p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Numero conectado</p>
-                        <p className="mt-3 text-sm font-medium text-zinc-200">
+                    <div className="card rounded-xl border p-4">
+                        <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Número conectado</p>
+                        <p className="mt-2 text-sm font-medium text-[var(--text-secondary)]">
                             {workspace.connection?.displayPhoneNumber ?? 'No conectado'}
                         </p>
                     </div>
@@ -61,11 +57,11 @@ export default async function CampaignsPage() {
                     recentRecipients={recentRecipients}
                 />
             ) : (
-                <div className="rounded-[28px] border border-dashed border-white/10 bg-black/20 px-8 py-12 text-center">
-                    <h2 className="text-2xl font-semibold text-white">Aun no esta listo para enviar</h2>
-                    <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-zinc-400">
-                        Para usar esta pantalla necesitas un numero conectado y al menos una plantilla APPROVED en tu
-                        WABA. Cuando ambas cosas existan, aqui podras disparar el reminder real desde el dashboard.
+                <div className="card rounded-xl border border-dashed px-8 py-12 text-center">
+                    <h2 className="text-xl font-semibold text-[var(--text-primary)]">Aún no está listo para enviar</h2>
+                    <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-[var(--text-muted)]">
+                        Para usar esta pantalla necesitas un número conectado y al menos una plantilla APPROVED en tu
+                        WABA. Cuando ambas cosas existan, aquí podrás disparar el recordatorio desde el dashboard.
                     </p>
                 </div>
             )}

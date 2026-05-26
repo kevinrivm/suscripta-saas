@@ -2,260 +2,255 @@ import Link from 'next/link';
 import { getWhatsAppWorkspaceBundle } from '@/app/actions/whatsapp';
 import { createClient } from '@/utils/supabase/server';
 
-function countEventsByStatus(
-  events: Array<{ status: string }>
-) {
+function countEventsByStatus(events: Array<{ status: string }>) {
   return events.reduce(
-    (accumulator, event) => {
-      const normalized = event.status.toLowerCase();
-      if (normalized === 'accepted' || normalized === 'sent') {
-        accumulator.sent += 1;
-      }
-      if (normalized === 'delivered' || normalized === 'read') {
-        accumulator.delivered += 1;
-      }
-      return accumulator;
+    (acc, event) => {
+      const s = event.status.toLowerCase();
+      if (s === 'accepted' || s === 'sent') acc.sent += 1;
+      if (s === 'delivered' || s === 'read') acc.delivered += 1;
+      return acc;
     },
     { sent: 0, delivered: 0 }
   );
 }
 
-// Inline SVGs for Semantics
 const DoubleCheckIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <path d="M18 6 7 17l-5-5" />
-    <path d="m22 10-7.5 7.5L13 16" />
+    <path d="M18 6 7 17l-5-5" /><path d="m22 10-7.5 7.5L13 16" />
   </svg>
 );
-
 const CheckIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
     <path d="M20 6 9 17l-5-5" />
   </svg>
 );
-
 const AlertIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <circle cx="12" cy="12" r="10" />
-    <line x1="12" x2="12" y1="8" y2="12" />
-    <line x1="12" x2="12.01" y1="16" y2="16" />
+    <circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="12" /><line x1="12" x2="12.01" y1="16" y2="16" />
   </svg>
 );
-
 const ClockIcon = ({ className }: { className?: string }) => (
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
+    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+  </svg>
+);
+const UserIcon = ({ className }: { className?: string }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
   </svg>
 );
 
 function getStatusIcon(status: string) {
   const s = status.toLowerCase();
-  if (s === 'read' || s === 'delivered') return <DoubleCheckIcon className="w-4 h-4 text-emerald-400" />;
-  if (s === 'accepted' || s === 'sent') return <CheckIcon className="w-4 h-4 text-zinc-400" />;
-  if (s === 'failed' || s === 'error') return <AlertIcon className="w-4 h-4 text-red-500" />;
-  return <ClockIcon className="w-4 h-4 text-zinc-500" />;
+  if (s === 'read' || s === 'delivered') return <DoubleCheckIcon className="w-3.5 h-3.5 text-emerald-500" />;
+  if (s === 'accepted' || s === 'sent') return <CheckIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" />;
+  if (s === 'failed' || s === 'error') return <AlertIcon className="w-3.5 h-3.5 text-red-500" />;
+  return <ClockIcon className="w-3.5 h-3.5 text-[var(--text-muted)]" />;
 }
+
+const STATUS_LABEL: Record<string, string> = {
+  delivered: 'Entregado',
+  read:      'Leído',
+  sent:      'Enviado',
+  accepted:  'Aceptado',
+  failed:    'Fallido',
+  error:     'Error',
+};
 
 export default async function DashboardOverviewPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  // Extraer el primer nombre si existe en el metadata
-  const userName = user?.user_metadata?.full_name?.split(' ')[0] || 'Administrador';
+  const firstName = user?.user_metadata?.first_name
+    || user?.user_metadata?.full_name?.split(' ')[0]
+    || 'Hola';
 
   const workspace = await getWhatsAppWorkspaceBundle(60);
   const approvedTemplates = workspace.templates.filter(
-    (template) => template.status.toUpperCase() === 'APPROVED'
+    t => t.status.toUpperCase() === 'APPROVED'
   );
   const liveContacts = new Set(
     workspace.recentMessageEvents
-      .map((event) => event.recipientPhone?.trim())
-      .filter((phone): phone is string => Boolean(phone))
+      .map(e => e.recipientPhone?.trim())
+      .filter((p): p is string => Boolean(p))
   );
   const metrics = countEventsByStatus(workspace.recentMessageEvents);
 
+  const stats = [
+    {
+      label: 'Número conectado',
+      value: workspace.connection?.displayPhoneNumber ?? '—',
+      sub: workspace.connection?.verifiedName ?? 'Sin conexión',
+      accent: !!workspace.connection,
+    },
+    {
+      label: 'Plantillas aprobadas',
+      value: String(approvedTemplates.length),
+      sub: approvedTemplates.length === 1 ? 'Lista para usar' : 'Listas para usar',
+      accent: false,
+    },
+    {
+      label: 'Contactos activos',
+      value: String(liveContacts.size),
+      sub: 'Detectados en eventos',
+      accent: false,
+    },
+    {
+      label: 'Entregas confirmadas',
+      value: String(metrics.delivered),
+      sub: `${metrics.sent} enviados recientemente`,
+      accent: false,
+    },
+  ];
+
   return (
-    <div className="mx-auto w-full max-w-7xl px-8 py-8 animate-in fade-in zoom-in-95 duration-500">
-      <section className="overflow-hidden rounded-[32px] border border-emerald-500/20 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.18),transparent_38%),linear-gradient(180deg,#0e1012_0%,#09090b_100%)] p-8 shadow-[0_24px_120px_rgba(0,0,0,0.45)]">
-        <div className="grid gap-10 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="flex flex-col justify-center">
-            <div>
-              <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300">
-                Suscripta MVP
-              </span>
-              <h1 className="mt-5 max-w-3xl text-4xl sm:text-5xl font-semibold leading-tight tracking-tight text-white">
-                Hola, {userName} 👋
-              </h1>
-              <p className="mt-5 max-w-2xl text-sm leading-7 text-zinc-300 font-light">
-                Aquí tienes el estado general de las interacciones vía WhatsApp. Ya cuentas con tu número conectado, plantillas y eventos sincronizados.
-              </p>
-            </div>
+    <div className="px-8 py-8 max-w-6xl mx-auto space-y-8">
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link
-                href="/dashboard/campaigns"
-                className="rounded-full bg-emerald-500 px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-emerald-400 hover:shadow-[0_0_20px_rgba(16,185,129,0.3)] hover:-translate-y-0.5"
-              >
-                Probar envío real
-              </Link>
-              <Link
-                href="/dashboard/conversations"
-                className="rounded-full border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-zinc-200 transition-all hover:border-white/20 hover:bg-white/[0.08] hover:-translate-y-0.5"
-              >
-                Ver conversaciones
-              </Link>
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-2">
-            <div className="group rounded-[28px] border border-white/10 bg-black/25 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/50 hover:shadow-[0_8px_30px_rgba(16,185,129,0.1)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500 transition-colors group-hover:text-emerald-400">Numero conectado</p>
-              <p className="mt-4 text-xl font-semibold text-white">
-                {workspace.connection?.displayPhoneNumber ?? 'No conectado'}
-              </p>
-              <p className="mt-2 text-sm text-zinc-400">
-                {workspace.connection?.verifiedName ?? 'Esperando vinculacion'}
-              </p>
-            </div>
-
-            <div className="group rounded-[28px] border border-white/10 bg-black/25 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/50 hover:shadow-[0_8px_30px_rgba(16,185,129,0.1)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500 transition-colors group-hover:text-emerald-400">Plantillas aprobadas</p>
-              <p className="mt-4 text-4xl font-semibold text-white">{approvedTemplates.length}</p>
-              <p className="mt-2 text-sm text-zinc-400">Catalogo listo para usar.</p>
-            </div>
-
-            <div className="group rounded-[28px] border border-white/10 bg-black/25 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/50 hover:shadow-[0_8px_30px_rgba(16,185,129,0.1)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500 transition-colors group-hover:text-emerald-400">Contactos activos</p>
-              <p className="mt-4 text-4xl font-semibold text-white">{liveContacts.size}</p>
-              <p className="mt-2 text-sm text-zinc-400">Unicos detectados desde eventos.</p>
-            </div>
-
-            <div className="group rounded-[28px] border border-white/10 bg-black/25 p-5 transition-all duration-300 hover:-translate-y-1 hover:border-emerald-500/50 hover:shadow-[0_8px_30px_rgba(16,185,129,0.1)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500 transition-colors group-hover:text-emerald-400">Entregas / lecturas</p>
-              <p className="mt-4 text-4xl font-semibold text-white">{metrics.delivered}</p>
-              <p className="mt-2 text-sm text-zinc-400">
-                {metrics.sent} envios aceptados por Meta recientemente.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-8 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <div className="flex flex-col gap-6 rounded-[30px] border border-white/10 bg-[#0b0b0d] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-semibold text-white">Listo para demo</h2>
-              <p className="mt-2 text-sm text-zinc-500">
-                Ruta sugerida para ensenar el MVP en YouTube sin salirte del producto.
-              </p>
-            </div>
-            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs uppercase tracking-[0.16em] text-emerald-300 whitespace-nowrap">
-              Video flow
-            </span>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3 h-full">
-            <div className="rounded-[24px] border border-white/10 bg-black/25 p-5 transition-colors hover:bg-white/[0.04]">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Paso 1</p>
-              <h3 className="mt-3 text-lg font-semibold text-white flex items-center gap-2">
-                Conversación
-                <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-                Ensena la actividad real del numero y tu &quot;hola&quot;.
-              </p>
-            </div>
-
-            <div className="rounded-[24px] border border-white/10 bg-black/25 p-5 transition-colors hover:bg-white/[0.04]">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Paso 2</p>
-              <h3 className="mt-3 text-lg font-semibold text-white flex items-center gap-2">
-                Plantillas
-                <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-                Muestra la plantilla real aprobada y su preview local.
-              </p>
-            </div>
-
-            <div className="rounded-[24px] border border-white/10 bg-black/25 p-5 transition-colors hover:bg-white/[0.04]">
-              <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Paso 3</p>
-              <h3 className="mt-3 text-lg font-semibold text-white flex items-center gap-2">
-                Envíos
-                <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-zinc-400">
-                Dispara el reminder desde aqui y luego valida si quedo entregado o fallo en la actividad reciente.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-col rounded-[30px] border border-white/10 bg-[#0b0b0d] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
-          <h2 className="text-2xl font-semibold text-white">Actividad reciente</h2>
-          <p className="mt-2 text-sm text-zinc-500 mb-6">
-            Ultimos eventos capturados para poblar bandejas de entrada.
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)] tracking-tight">
+            Buenos días, {firstName}
+          </h1>
+          <p className="mt-1 text-sm text-[var(--text-muted)]">
+            Aquí tienes el resumen de tu cuenta WhatsApp.
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/campaigns"
+            className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium transition-colors"
+          >
+            Enviar recordatorio
+          </Link>
+          <Link
+            href="/dashboard/conversations"
+            className="px-4 py-2 rounded-lg border border-[var(--card-border)] bg-[var(--card-bg)] hover:bg-[var(--card-hover)] text-[var(--text-secondary)] text-sm font-medium transition-colors"
+          >
+            Ver actividad
+          </Link>
+        </div>
+      </div>
 
-          <div className="flex flex-col gap-3 flex-1 overflow-y-auto pr-1">
-            {workspace.recentMessageEvents.slice(0, 6).map((event) => {
+      {/* ── Stats ── */}
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+        {stats.map(stat => (
+          <div
+            key={stat.label}
+            className={`card rounded-xl border p-5 ${stat.accent ? 'border-emerald-500/30 bg-emerald-500/5' : ''}`}
+          >
+            <p className="text-xs font-medium text-[var(--text-muted)] uppercase tracking-wide">
+              {stat.label}
+            </p>
+            <p className={`mt-3 text-2xl font-semibold tracking-tight ${stat.accent ? 'text-emerald-600 dark:text-emerald-400' : 'text-[var(--text-primary)]'}`}>
+              {stat.value}
+            </p>
+            <p className="mt-1 text-xs text-[var(--text-muted)]">{stat.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Activity ── */}
+      <div className="grid xl:grid-cols-[1fr_380px] gap-6">
+
+        {/* Recent events */}
+        <div className="card rounded-xl border">
+          <div className="flex items-center justify-between px-5 py-4 border-b divider">
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--text-primary)]">Actividad reciente</h2>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">Últimos eventos de mensajes capturados</p>
+            </div>
+            <Link
+              href="/dashboard/conversations"
+              className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline font-medium"
+            >
+              Ver todo
+            </Link>
+          </div>
+
+          <div className="divide-y divide-[var(--divider)]">
+            {workspace.recentMessageEvents.slice(0, 6).map(event => {
               const isFailed = event.status.toLowerCase() === 'failed';
-
               return (
-                <div
-                  key={event.messageId}
-                  className={`group rounded-[22px] border px-4 py-4 transition-all hover:bg-white/[0.02] ${isFailed ? 'border-red-500/20 bg-red-500/5' : 'border-white/5 bg-black/20'}`}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-zinc-800/80 flex items-center justify-center shrink-0 border border-white/10">
-                        <svg className="w-4 h-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <p className={`text-sm font-medium ${isFailed ? 'text-red-400' : 'text-zinc-200'} transition-colors group-hover:text-white`}>
-                          {event.messageText ?? event.templateName ?? 'Evento sincronizado'}
-                        </p>
-                        <p className="mt-0.5 text-xs text-zinc-500 flex items-center gap-1.5">
-                          <span>{event.recipientPhone ?? 'Sin teléfono'}</span>
-                          <span className="w-1 h-1 rounded-full bg-zinc-700"></span>
-                          <span className="capitalize">{event.direction ?? 'unknown'}</span>
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isFailed && (
-                        <span className="text-xs text-red-500/80 mr-2 max-w-[120px] truncate hidden sm:block" title={event.errorMessage || 'Error de entrega'}>
-                          {event.errorMessage ?? 'Error de entrega'}
-                        </span>
-                      )}
-                      <span className="flex items-center gap-1.5 rounded-full border border-white/5 bg-white/[0.04] px-3 py-1.5 text-xs text-zinc-300 capitalize font-medium">
-                        {getStatusIcon(event.status)}
-                        {event.status}
-                      </span>
-                    </div>
+                <div key={event.messageId} className="flex items-center gap-3 px-5 py-3.5 hover:bg-[var(--card-hover)] transition-colors">
+                  <div className="w-8 h-8 rounded-full bg-[var(--badge-bg)] flex items-center justify-center shrink-0">
+                    <UserIcon className="w-4 h-4 text-[var(--text-muted)]" />
                   </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-medium truncate ${isFailed ? 'text-red-500' : 'text-[var(--text-primary)]'}`}>
+                      {event.messageText ?? event.templateName ?? 'Evento de mensaje'}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                      {event.recipientPhone ?? 'Sin teléfono'} · {event.direction ?? 'unknown'}
+                    </p>
+                  </div>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                    isFailed
+                      ? 'bg-red-500/10 text-red-500'
+                      : 'bg-[var(--badge-bg)] text-[var(--badge-text)]'
+                  }`}>
+                    {getStatusIcon(event.status)}
+                    {STATUS_LABEL[event.status.toLowerCase()] ?? event.status}
+                  </span>
                 </div>
               );
             })}
 
-            {!workspace.recentMessageEvents.length ? (
-              <div className="rounded-[22px] border border-dashed border-white/10 bg-black/20 px-4 py-8 flex flex-col items-center justify-center text-center h-full">
-                <ClockIcon className="w-8 h-8 text-zinc-600 mb-3" />
-                <p className="text-sm font-medium text-zinc-400">Aún no hay actividad reciente.</p>
-                <p className="text-xs text-zinc-500 mt-1">Los envíos y mensajes recibidos aparecerán aquí.</p>
+            {!workspace.recentMessageEvents.length && (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <ClockIcon className="w-8 h-8 text-[var(--text-muted)] mb-3" />
+                <p className="text-sm font-medium text-[var(--text-secondary)]">Sin actividad reciente</p>
+                <p className="text-xs text-[var(--text-muted)] mt-1">Los envíos y mensajes aparecerán aquí</p>
               </div>
-            ) : null}
+            )}
           </div>
         </div>
-      </section>
+
+        {/* Quick actions */}
+        <div className="space-y-4">
+          <div className="card rounded-xl border p-5">
+            <h2 className="text-sm font-semibold text-[var(--text-primary)]">Acciones rápidas</h2>
+            <div className="mt-4 space-y-2">
+              {[
+                { href: '/dashboard/campaigns',     label: 'Enviar recordatorio',   desc: 'Dispara una plantilla al instante' },
+                { href: '/dashboard/contacts',      label: 'Gestionar contactos',   desc: 'Ver, pausar o eliminar contactos' },
+                { href: '/dashboard/clients',       label: 'Importar clientes',     desc: 'Carga CSV o Excel masivo' },
+                { href: '/dashboard/templates',     label: 'Ver plantillas',        desc: 'Plantillas aprobadas en tu WABA' },
+              ].map(action => (
+                <Link
+                  key={action.href}
+                  href={action.href}
+                  className="flex items-start gap-3 p-3 rounded-lg hover:bg-[var(--nav-hover-bg)] transition-colors group"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-[var(--text-primary)] group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      {action.label}
+                    </p>
+                    <p className="text-xs text-[var(--text-muted)] mt-0.5">{action.desc}</p>
+                  </div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--text-muted)] shrink-0 mt-0.5">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {workspace.connection && (
+            <div className="card rounded-xl border p-5 border-emerald-500/20 bg-emerald-500/5">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">WhatsApp conectado</p>
+              </div>
+              <p className="text-sm font-medium text-[var(--text-primary)]">
+                {workspace.connection.displayPhoneNumber}
+              </p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                {workspace.connection.verifiedName}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

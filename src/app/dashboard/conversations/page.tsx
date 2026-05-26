@@ -159,18 +159,18 @@ function statusTone(status: string) {
     const normalized = status.toLowerCase();
 
     if (normalized === 'read' || normalized === 'delivered') {
-        return 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20';
+        return 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
     }
 
     if (normalized === 'failed') {
-        return 'text-rose-300 bg-rose-500/10 border-rose-500/20';
+        return 'text-red-500 bg-red-500/10 border-red-500/20';
     }
 
     if (normalized === 'received' || normalized === 'accepted') {
-        return 'text-sky-300 bg-sky-500/10 border-sky-500/20';
+        return 'text-sky-600 dark:text-sky-400 bg-sky-500/10 border-sky-500/20';
     }
 
-    return 'text-zinc-300 bg-white/5 border-white/10';
+    return 'text-[var(--badge-text)] bg-[var(--badge-bg)] border-[var(--card-border)]';
 }
 
 export default function ConversationsPage() {
@@ -245,25 +245,21 @@ export default function ConversationsPage() {
         <div className="mx-auto flex h-full min-h-full w-full max-w-7xl flex-col px-8 py-8 dashboard-page">
             <div className="mb-8 flex items-end justify-between gap-6">
                 <div>
-                    <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300">
-                        Inbox MVP
-                    </span>
-                    <h1 className="mt-4 text-4xl font-semibold tracking-tight">Conversaciones</h1>
-                    <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">
-                        Esta vista ya reacciona a mensajes entrantes y salientes guardados en Supabase. Hace polling
-                        ligero para que tus pruebas manuales aparezcan sin recargar toda la app.
+                    <h1 className="text-2xl font-semibold tracking-tight text-[var(--text-primary)]">Conversaciones</h1>
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-[var(--text-muted)]">
+                        Mensajes entrantes y salientes guardados en Supabase, actualizados automáticamente.
                     </p>
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className="grid min-w-[280px] grid-cols-2 gap-3">
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-sm">
-                            <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Threads reales</p>
-                            <p className="mt-3 text-3xl font-semibold text-white">{liveThreads.length}</p>
+                    <div className="grid min-w-[260px] grid-cols-2 gap-3">
+                        <div className="card rounded-xl border p-4">
+                            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Hilos activos</p>
+                            <p className="mt-2 text-2xl font-semibold text-[var(--text-primary)]">{liveThreads.length}</p>
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-4 backdrop-blur-sm">
-                            <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Numero conectado</p>
-                            <p className="mt-3 text-sm font-medium text-zinc-200">
+                        <div className="card rounded-xl border p-4">
+                            <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Número conectado</p>
+                            <p className="mt-2 text-sm font-medium text-[var(--text-secondary)]">
                                 {workspace.connection?.displayPhoneNumber ?? 'No conectado'}
                             </p>
                         </div>
@@ -274,9 +270,9 @@ export default function ConversationsPage() {
                         onClick={() => {
                             void refreshWorkspace(true);
                         }}
-                        className="rounded-full border border-white/10 px-4 py-2 text-sm text-zinc-300 transition hover:border-white/20 hover:bg-white/5"
+                        className="rounded-full border border-[var(--card-border)] px-4 py-2 text-sm text-[var(--text-secondary)] transition hover:bg-[var(--card-hover)]"
                     >
-                        {isRefreshing ? 'Actualizando...' : 'Refresh'}
+                        {isRefreshing ? 'Actualizando...' : 'Actualizar'}
                     </button>
                 </div>
             </div>
@@ -288,18 +284,17 @@ export default function ConversationsPage() {
             ) : null}
 
             <div className="grid min-h-[720px] flex-1 grid-cols-1 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(19,26,28,0.94),rgba(12,16,18,0.98))] shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
-                    <div className="border-b border-white/10 px-5 py-4">
-                        <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-zinc-500">
-                            Los eventos reales aparecen primero. Si mandas un mensaje manual al numero y el webhook lo
-                            guarda, deberia entrar aqui en el siguiente refresh automatico.
-                        </div>
+                <section className="card flex min-h-0 flex-col overflow-hidden rounded-xl border">
+                    <div className="border-b border-[var(--divider)] px-5 py-4">
+                        <p className="text-sm text-[var(--text-muted)]">
+                            Los eventos reales aparecen primero. Se actualiza automáticamente cada 8 segundos.
+                        </p>
                     </div>
 
                     <div className="min-h-0 flex-1 overflow-y-auto">
-                        <div className="divide-y divide-white/5">
+                        <div className="divide-y divide-[var(--divider)]">
                             {isLoading && !threads.length ? (
-                                <div className="px-5 py-8 text-sm text-zinc-400">Cargando conversaciones...</div>
+                                <div className="px-5 py-8 text-sm text-[var(--text-muted)]">Cargando conversaciones...</div>
                             ) : (
                                 threads.map((thread) => (
                                     <button
@@ -308,34 +303,34 @@ export default function ConversationsPage() {
                                         onClick={() => setSelectedThreadId(thread.id)}
                                         className={`block w-full px-5 py-4 text-left transition ${
                                             activeThread?.id === thread.id
-                                                ? 'bg-emerald-500/8'
-                                                : 'hover:bg-white/[0.03]'
+                                                ? 'bg-emerald-500/8 dark:bg-emerald-500/8'
+                                                : 'hover:bg-[var(--card-hover)]'
                                         }`}
                                     >
                                         <div className="flex items-start justify-between gap-3">
                                             <div>
                                                 <div className="flex items-center gap-2">
-                                                    <p className="font-medium text-white">{thread.title}</p>
+                                                    <p className="font-medium text-[var(--text-primary)]">{thread.title}</p>
                                                     <span
-                                                        className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] ${
+                                                        className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${
                                                             thread.source === 'live'
-                                                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                                                                : 'border-white/10 bg-white/5 text-zinc-400'
+                                                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                                : 'border-[var(--card-border)] bg-[var(--badge-bg)] text-[var(--badge-text)]'
                                                         }`}
                                                     >
-                                                        {thread.source}
+                                                        {thread.source === 'live' ? 'real' : 'demo'}
                                                     </span>
                                                 </div>
-                                                <p className="mt-1 text-xs text-zinc-500">{thread.phone}</p>
+                                                <p className="mt-1 text-xs text-[var(--text-muted)]">{thread.phone}</p>
                                             </div>
 
-                                            <span className="text-xs text-zinc-500">
+                                            <span className="text-xs text-[var(--text-muted)]">
                                                 {formatRelativeDate(thread.lastUpdatedAt)}
                                             </span>
                                         </div>
 
-                                        <p className="mt-3 line-clamp-2 text-sm text-zinc-300">{thread.lastMessage}</p>
-                                        <span className={`mt-3 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusTone(thread.lastStatus)}`}>
+                                        <p className="mt-2 line-clamp-2 text-sm text-[var(--text-secondary)]">{thread.lastMessage}</p>
+                                        <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-medium ${statusTone(thread.lastStatus)}`}>
                                             {thread.lastStatus}
                                         </span>
                                     </button>
@@ -345,61 +340,61 @@ export default function ConversationsPage() {
                     </div>
                 </section>
 
-                <section className="flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(24,31,34,0.96),rgba(14,18,20,0.98))] shadow-[0_20px_80px_rgba(0,0,0,0.28)]">
+                <section className="card flex min-h-0 flex-col overflow-hidden rounded-xl border">
                     {activeThread ? (
                         <>
-                            <div className="flex items-center justify-between border-b border-white/10 px-7 py-5">
+                            <div className="flex items-center justify-between border-b border-[var(--divider)] px-6 py-4">
                                 <div>
                                     <div className="flex items-center gap-3">
-                                        <h2 className="text-xl font-semibold text-white">{activeThread.title}</h2>
+                                        <h2 className="text-base font-semibold text-[var(--text-primary)]">{activeThread.title}</h2>
                                         <span
-                                            className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] ${
+                                            className={`rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-wide ${
                                                 activeThread.source === 'live'
-                                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
-                                                    : 'border-white/10 bg-white/5 text-zinc-400'
+                                                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                                                    : 'border-[var(--card-border)] bg-[var(--badge-bg)] text-[var(--badge-text)]'
                                             }`}
                                         >
-                                            {activeThread.source === 'live' ? 'Evento real' : 'Demo visual'}
+                                            {activeThread.source === 'live' ? 'Evento real' : 'Demo'}
                                         </span>
                                     </div>
-                                    <p className="mt-1 text-sm text-zinc-500">{activeThread.phone}</p>
+                                    <p className="mt-1 text-sm text-[var(--text-muted)]">{activeThread.phone}</p>
                                 </div>
 
-                                <div className="rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-right">
-                                    <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Ultimo estado</p>
-                                    <p className="mt-2 text-sm font-medium text-white">{activeThread.lastStatus}</p>
+                                <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-hover)] px-4 py-3 text-right">
+                                    <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Último estado</p>
+                                    <p className="mt-1 text-sm font-medium text-[var(--text-primary)]">{activeThread.lastStatus}</p>
                                 </div>
                             </div>
 
-                            <div className="min-h-0 flex-1 overflow-y-auto px-7 py-6">
+                            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
                                 <div className="space-y-4">
                                     {activeThread.events.map((event) => {
                                         const isInbound = event.direction === 'inbound';
                                         const bubbleClass = isInbound
-                                            ? 'mr-auto border-white/10 bg-white/[0.03]'
-                                            : 'ml-auto border-emerald-500/20 bg-emerald-500/10';
+                                            ? 'mr-auto border-[var(--card-border)] bg-[var(--card-hover)]'
+                                            : 'ml-auto border-emerald-500/20 bg-emerald-500/5';
 
                                         return (
-                                            <div key={event.messageId} className={`max-w-[78%] rounded-[24px] border px-5 py-4 ${bubbleClass}`}>
+                                            <div key={event.messageId} className={`max-w-[78%] rounded-xl border px-4 py-3 ${bubbleClass}`}>
                                                 <div className="flex items-center justify-between gap-4">
-                                                    <span className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                                                    <span className="text-xs uppercase tracking-wide text-[var(--text-muted)]">
                                                         {isInbound ? 'Entrante' : 'Saliente'}
                                                     </span>
-                                                    <span className="text-xs text-zinc-500">
+                                                    <span className="text-xs text-[var(--text-muted)]">
                                                         {formatEventTime(event.updatedAt)}
                                                     </span>
                                                 </div>
 
-                                                <div className="mt-3 text-sm leading-6 text-zinc-200">
+                                                <div className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
                                                     {event.messageText ?? event.templateName ?? 'Actividad sincronizada desde WhatsApp'}
                                                 </div>
 
-                                                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+                                                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
                                                     <span className={`rounded-full border px-2.5 py-1 ${statusTone(event.status)}`}>
                                                         {event.status}
                                                     </span>
                                                     {event.errorMessage ? (
-                                                        <span className="text-rose-300">
+                                                        <span className="text-red-500">
                                                             {event.errorCode ? `${event.errorCode}: ` : ''}
                                                             {event.errorMessage}
                                                         </span>
@@ -412,16 +407,16 @@ export default function ConversationsPage() {
                             </div>
 
                             {activeThread.source === 'live' ? (
-                                <div className="border-t border-white/10 px-7 py-5">
-                                    <div className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                                <div className="border-t border-[var(--divider)] px-6 py-4">
+                                    <div className="rounded-xl border border-[var(--card-border)] bg-[var(--card-hover)] p-4">
                                         <div className="mb-3 flex items-center justify-between gap-4">
                                             <div>
-                                                <p className="text-sm font-medium text-white">Responder en la ventana abierta</p>
-                                                <p className="mt-1 text-xs text-zinc-500">
-                                                    Envia texto libre al numero activo. Ideal para la demo despues de recibir tu &quot;hola&quot;.
+                                                <p className="text-sm font-medium text-[var(--text-primary)]">Responder en la ventana abierta</p>
+                                                <p className="mt-1 text-xs text-[var(--text-muted)]">
+                                                    Envía texto libre al número activo (ventana de 24h).
                                                 </p>
                                             </div>
-                                            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] uppercase tracking-[0.16em] text-emerald-300">
+                                            <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-[10px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
                                                 24h window
                                             </span>
                                         </div>
@@ -430,12 +425,12 @@ export default function ConversationsPage() {
                                             value={draftText}
                                             onChange={(event) => setDraftText(event.target.value)}
                                             rows={3}
-                                            className="w-full rounded-[20px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/40"
+                                            className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-emerald-500/40"
                                             placeholder="Escribe un mensaje libre para este chat..."
                                         />
 
-                                        <div className="mt-4 flex items-center justify-between gap-4">
-                                            <p className="text-xs text-zinc-500">
+                                        <div className="mt-3 flex items-center justify-between gap-4">
+                                            <p className="text-xs text-[var(--text-muted)]">
                                                 Destinatario: {activeThread.phone}
                                             </p>
                                             <button
@@ -479,9 +474,9 @@ export default function ConversationsPage() {
                     ) : (
                         <div className="flex h-full items-center justify-center px-10 text-center">
                             <div>
-                                <h2 className="text-2xl font-semibold text-white">Aun no hay conversaciones</h2>
-                                <p className="mt-3 max-w-lg text-sm leading-6 text-zinc-400">
-                                    Conecta un numero, envia o recibe un mensaje y esta vista empezara a reflejar la
+                                <h2 className="text-xl font-semibold text-[var(--text-primary)]">Aún no hay conversaciones</h2>
+                                <p className="mt-3 max-w-lg text-sm leading-6 text-[var(--text-muted)]">
+                                    Conecta un número, envía o recibe un mensaje y esta vista empezará a reflejar la
                                     actividad en tiempo real desde los webhooks de WhatsApp.
                                 </p>
                             </div>

@@ -51,3 +51,14 @@ export async function logout() {
   await supabase.auth.signOut()
   redirect('/login')
 }
+
+export async function getSessionUser() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  return {
+    email: user.email ?? '',
+    firstName: (user.user_metadata?.first_name || user.user_metadata?.full_name?.split(' ')[0] || 'Usuario') as string,
+    companyName: (user.user_metadata?.company_name || '') as string,
+  }
+}

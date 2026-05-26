@@ -1,81 +1,114 @@
 @import "tailwindcss";
 
+/* Dark mode via .dark class on <html> */
+@variant dark (&:where(.dark, .dark *));
+
 @theme {
-  --font-sans: var(--font-outfit), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-  
-  --color-primary: #10b981; /* Emerald 500 */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --color-primary: #10b981;
   --color-primary-foreground: #ffffff;
-  --color-background: #050505;
-  --color-foreground: #fafafa;
-  --color-muted: #171717;
-  --color-muted-foreground: #a3a3a3;
-  --color-accent: #6ee7b7; /* Emerald 300 */
+  --color-background: #f8f9fa;
+  --color-foreground: #18181b;
 }
 
+/* ── Light mode (default) ── */
 @layer base {
   :root {
-    --background: #0d1314;
-    --foreground: #f6faf8;
-    --dashboard-shell: #0d1314;
-    --dashboard-sidebar: rgba(10, 14, 16, 0.92);
-    --dashboard-main: #101719;
-    --dashboard-text: #f6faf8;
-    --dashboard-muted: #9fb0aa;
+    --bg-body:            #f4f5f7;
+    --sidebar-bg:         #ffffff;
+    --sidebar-border:     #e4e4e7;
+    --main-bg:            #f4f5f7;
+    --card-bg:            #ffffff;
+    --card-border:        #e4e4e7;
+    --card-hover:         #f9fafb;
+    --text-primary:       #18181b;
+    --text-secondary:     #52525b;
+    --text-muted:         #a1a1aa;
+    --accent:             #10b981;
+    --accent-subtle:      #ecfdf5;
+    --accent-text:        #059669;
+    --nav-active-bg:      #f0fdf4;
+    --nav-active-text:    #059669;
+    --nav-active-border:  #bbf7d0;
+    --nav-hover-bg:       #f4f4f5;
+    --nav-text:           #71717a;
+    --divider:            #e4e4e7;
+    --input-bg:           #ffffff;
+    --input-border:       #d4d4d8;
+    --badge-bg:           #f4f4f5;
+    --badge-text:         #52525b;
   }
 
-  :root[data-dashboard-theme="light"] {
-    --background: #eef5f0;
-    --foreground: #0f1720;
-    --dashboard-shell: #eef5f0;
-    --dashboard-sidebar: rgba(255, 255, 255, 0.8);
-    --dashboard-main: #f7fbf8;
-    --dashboard-text: #102019;
-    --dashboard-muted: #5d7169;
+  /* ── Dark mode ── */
+  .dark {
+    --bg-body:            #0f1117;
+    --sidebar-bg:         #111318;
+    --sidebar-border:     rgba(255,255,255,0.07);
+    --main-bg:            #0f1117;
+    --card-bg:            #1a1d23;
+    --card-border:        rgba(255,255,255,0.07);
+    --card-hover:         rgba(255,255,255,0.03);
+    --text-primary:       #f4f4f5;
+    --text-secondary:     #a1a1aa;
+    --text-muted:         #71717a;
+    --accent:             #10b981;
+    --accent-subtle:      rgba(16,185,129,0.1);
+    --accent-text:        #34d399;
+    --nav-active-bg:      rgba(16,185,129,0.08);
+    --nav-active-text:    #34d399;
+    --nav-active-border:  rgba(16,185,129,0.2);
+    --nav-hover-bg:       rgba(255,255,255,0.04);
+    --nav-text:           #71717a;
+    --divider:            rgba(255,255,255,0.07);
+    --input-bg:           #1a1d23;
+    --input-border:       rgba(255,255,255,0.1);
+    --badge-bg:           rgba(255,255,255,0.06);
+    --badge-text:         #a1a1aa;
   }
-}
 
-@layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
-    background-color: var(--background);
-    color: var(--foreground);
-    background-image: 
-      radial-gradient(circle at 15% 50%, rgba(16, 185, 129, 0.08), transparent 25%),
-      radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.05), transparent 25%);
-    background-attachment: fixed;
+    background-color: var(--bg-body);
+    color: var(--text-primary);
+    font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   }
 }
 
+/* ── Semantic utilities ── */
 @layer utilities {
-  .dashboard-shell {
-    background: var(--dashboard-shell);
-    color: var(--dashboard-text);
+  .sidebar {
+    background: var(--sidebar-bg);
+    border-color: var(--sidebar-border);
+    color: var(--text-primary);
   }
 
-  .dashboard-sidebar {
-    background: var(--dashboard-sidebar);
+  .main-content {
+    background: var(--main-bg);
   }
 
-  .dashboard-main {
-    background: linear-gradient(180deg, color-mix(in srgb, var(--dashboard-main) 92%, white 8%), var(--dashboard-main));
+  .card {
+    background: var(--card-bg);
+    border-color: var(--card-border);
   }
 
-  .dashboard-theme-toggle {
-    background: color-mix(in srgb, var(--dashboard-sidebar) 88%, white 12%);
-    color: var(--dashboard-text);
-    border: 1px solid color-mix(in srgb, var(--dashboard-text) 12%, transparent);
+  .card-hover:hover {
+    background: var(--card-hover);
   }
-}
 
-/* Custom utilities */
-@layer utilities {
-  .text-glow {
-    text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);
-  }
-  
-  .glass-panel {
-    background: rgba(23, 23, 23, 0.6);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.05);
-  }
+  .text-primary   { color: var(--text-primary); }
+  .text-secondary { color: var(--text-secondary); }
+  .text-muted     { color: var(--text-muted); }
+  .divider        { border-color: var(--divider); }
+
+  /* Legacy compatibility */
+  .dashboard-shell    { background: var(--bg-body); color: var(--text-primary); }
+  .dashboard-sidebar  { background: var(--sidebar-bg); }
+  .dashboard-main     { background: var(--main-bg); }
 }

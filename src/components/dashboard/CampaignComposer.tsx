@@ -171,17 +171,17 @@ export function CampaignComposer({
 
     return (
         <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-            <section className="rounded-[28px] border border-white/10 bg-[#0b0b0d] p-6 shadow-[0_20px_80px_rgba(0,0,0,0.35)]">
+            <section className="card rounded-xl border p-6">
                 <div className="mb-6 flex items-end justify-between gap-4">
                     <div>
-                        <h2 className="text-2xl font-semibold text-white">Enviar recordatorio</h2>
-                        <p className="mt-2 text-sm text-zinc-500">
-                            Composer del MVP para disparar la plantilla real aprobada desde el dashboard del producto.
+                        <h2 className="text-base font-semibold text-[var(--text-primary)]">Enviar recordatorio</h2>
+                        <p className="mt-1 text-sm text-[var(--text-muted)]">
+                            Dispara tu plantilla aprobada directamente desde el dashboard.
                         </p>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-right">
-                        <p className="text-xs uppercase tracking-[0.16em] text-zinc-500">Numero emisor</p>
-                        <p className="mt-2 text-sm font-medium text-zinc-200">
+                    <div className="card rounded-xl border px-4 py-3 text-right">
+                        <p className="text-xs uppercase tracking-wide text-[var(--text-muted)]">Número emisor</p>
+                        <p className="mt-1 text-sm font-medium text-[var(--text-secondary)]">
                             {connectedNumber ?? 'No conectado'}
                         </p>
                     </div>
@@ -189,7 +189,7 @@ export function CampaignComposer({
 
                 <div className="space-y-5">
                     <div>
-                        <label className="mb-2 block text-sm font-medium text-zinc-200">Plantilla aprobada</label>
+                        <label className="mb-2 block text-sm font-medium text-[var(--text-secondary)]">Plantilla aprobada</label>
                         <select
                             value={templateName}
                             onChange={(event) => {
@@ -199,7 +199,7 @@ export function CampaignComposer({
                                 setTemplateName(event.target.value);
                                 setLanguageCode(nextTemplate?.language ?? 'en_US');
                             }}
-                            className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/40"
+                            className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-emerald-500/40"
                         >
                             {approvedTemplates.map((template) => (
                                 <option key={template.id} value={template.name}>
@@ -211,20 +211,20 @@ export function CampaignComposer({
 
                     <div className="grid gap-5 md:grid-cols-[1fr_220px]">
                         <div>
-                            <label className="mb-2 block text-sm font-medium text-zinc-200">Destinatario</label>
+                            <label className="mb-2 block text-sm font-medium text-[var(--text-secondary)]">Destinatario</label>
                             <input
                                 value={recipientPhone}
                                 onChange={(event) => setRecipientPhone(event.target.value)}
                                 placeholder="+5214621349768"
-                                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/40"
+                                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-emerald-500/40"
                             />
                         </div>
                         <div>
-                            <label className="mb-2 block text-sm font-medium text-zinc-200">Idioma</label>
+                            <label className="mb-2 block text-sm font-medium text-[var(--text-secondary)]">Idioma</label>
                             <input
                                 value={languageCode}
                                 onChange={(event) => setLanguageCode(event.target.value)}
-                                className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/40"
+                                className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-emerald-500/40"
                             />
                         </div>
                     </div>
@@ -236,7 +236,7 @@ export function CampaignComposer({
                                     key={recipient.phone}
                                     type="button"
                                     onClick={() => setRecipientPhone(recipient.phone)}
-                                    className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-zinc-300 transition hover:border-emerald-500/20 hover:bg-emerald-500/10 hover:text-emerald-200"
+                                    className="rounded-full border border-[var(--card-border)] bg-[var(--badge-bg)] px-3 py-1.5 text-xs text-[var(--badge-text)] transition hover:border-emerald-500/20 hover:bg-emerald-500/10 hover:text-emerald-600 dark:hover:text-emerald-400"
                                 >
                                     {recipient.label}
                                 </button>
@@ -245,15 +245,15 @@ export function CampaignComposer({
                     ) : null}
 
                     <div>
-                        <label className="mb-2 block text-sm font-medium text-zinc-200">Parametros del cuerpo</label>
+                        <label className="mb-2 block text-sm font-medium text-[var(--text-secondary)]">Parámetros del cuerpo</label>
                         <textarea
                             value={bodyParameters}
                             onChange={(event) => setBodyParameters(event.target.value)}
                             rows={5}
-                            className="w-full rounded-[24px] border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-emerald-500/40"
+                            className="w-full rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] px-4 py-3 text-sm text-[var(--text-primary)] outline-none transition focus:border-emerald-500/40"
                         />
-                        <p className="mt-2 text-xs text-zinc-500">
-                            Una variable por linea. La plantilla actual espera {expectedVariableCount} variable(s).
+                        <p className="mt-2 text-xs text-[var(--text-muted)]">
+                            Una variable por línea. La plantilla actual espera {expectedVariableCount} variable(s).
                         </p>
                     </div>
 
@@ -263,56 +263,56 @@ export function CampaignComposer({
                         onClick={() => {
                             void handleSend();
                         }}
-                        className="w-full rounded-[24px] bg-emerald-500 px-5 py-4 text-sm font-semibold text-black transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:bg-emerald-800 disabled:text-black/50"
+                        className="w-full rounded-xl bg-emerald-500 px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                         {isSending ? 'Enviando por Meta...' : 'Enviar recordatorio ahora'}
                     </button>
                 </div>
 
                 {result ? (
-                    <div className="mt-5 rounded-2xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+                    <div className="mt-5 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-600 dark:text-sky-300">
                         {result}
                     </div>
                 ) : null}
 
                 {error ? (
-                    <div className="mt-5 rounded-2xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                    <div className="mt-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
                         {error}
                     </div>
                 ) : null}
             </section>
 
             <aside className="space-y-6">
-                <section className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-                    <h3 className="text-xl font-semibold text-white">Vista previa</h3>
-                    <p className="mt-2 text-sm text-zinc-500">
-                        Asi se ve la plantilla que estas por disparar desde el MVP.
+                <section className="card rounded-xl border p-6">
+                    <h3 className="text-base font-semibold text-[var(--text-primary)]">Vista previa</h3>
+                    <p className="mt-1 text-sm text-[var(--text-muted)]">
+                        Así se verá la plantilla que estás por disparar.
                     </p>
 
-                    <div className="mt-5 rounded-[24px] border border-emerald-500/20 bg-emerald-500/8 p-5">
-                        <p className="text-xs uppercase tracking-[0.18em] text-emerald-300">
+                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-5">
+                        <p className="text-xs uppercase tracking-wide text-emerald-600 dark:text-emerald-400">
                             {selectedTemplate?.language ?? 'en_US'} · {selectedTemplate?.category ?? 'UTILITY'}
                         </p>
-                        <h4 className="mt-3 text-lg font-semibold text-white">
+                        <h4 className="mt-2 text-base font-semibold text-[var(--text-primary)]">
                             {selectedTemplate?.name ?? 'Sin plantilla'}
                         </h4>
-                        <p className="mt-4 text-sm leading-6 text-zinc-200">
+                        <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">
                             {selectedTemplate?.bodyText ?? 'Selecciona una plantilla aprobada para ver la vista previa.'}
                         </p>
                     </div>
                 </section>
 
-                <section className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6">
-                    <h3 className="text-xl font-semibold text-white">Flujo para video</h3>
-                    <div className="mt-5 space-y-3 text-sm text-zinc-300">
-                        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                            1. Selecciona la plantilla aprobada real.
+                <section className="card rounded-xl border p-6">
+                    <h3 className="text-base font-semibold text-[var(--text-primary)]">Flujo de envío</h3>
+                    <div className="mt-4 space-y-3 text-sm text-[var(--text-secondary)]">
+                        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-hover)] px-4 py-3">
+                            1. Selecciona la plantilla aprobada.
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                            2. Elige tu numero como destinatario.
+                        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-hover)] px-4 py-3">
+                            2. Elige el número de destino.
                         </div>
-                        <div className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-                            3. Enviala y luego abre la pestana de Conversaciones para ver el evento reflejado.
+                        <div className="rounded-lg border border-[var(--card-border)] bg-[var(--card-hover)] px-4 py-3">
+                            3. Envía y revisa el estado en Conversaciones.
                         </div>
                     </div>
                 </section>

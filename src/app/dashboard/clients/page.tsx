@@ -348,11 +348,8 @@ export default function ClientsUploadPage() {
     <div className="mx-auto w-full max-w-5xl px-8 py-8 animate-in fade-in zoom-in-95 duration-500">
       {/* Header del Módulo */}
       <div className="mb-8">
-        <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.22em] text-emerald-300 mb-4">
-          Base de Clientes
-        </span>
-        <h1 className="text-3xl font-semibold text-white">Importación Masiva (CSV)</h1>
-        <p className="mt-2 text-sm text-zinc-400">Sube tu lista de clientes y dales formato universal E.164 para interactuar vía WhatsApp.</p>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Importación de Clientes</h1>
+        <p className="mt-1 text-sm text-[var(--text-muted)]">Sube tu lista de clientes y dales formato universal E.164 para interactuar vía WhatsApp.</p>
       </div>
 
       {/* Stepper Visual */}
@@ -364,20 +361,20 @@ export default function ClientsUploadPage() {
 
           return (
             <div key={s} className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isActive ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]' : isPast ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/5 text-zinc-500 border border-white/5'}`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${isActive ? 'bg-emerald-500 text-white' : isPast ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-[var(--badge-bg)] text-[var(--text-muted)] border border-[var(--card-border)]'}`}>
                 {isPast ? <CheckIcon className="w-4 h-4" /> : stepNum}
               </div>
-              <span className={`text-sm font-medium ${isActive ? 'text-white' : isPast ? 'text-zinc-300' : 'text-zinc-600'}`}>
+              <span className={`text-sm font-medium ${isActive ? 'text-[var(--text-primary)]' : isPast ? 'text-[var(--text-secondary)]' : 'text-[var(--text-muted)]'}`}>
                 {s === 'UPLOAD' ? 'Archivo' : s === 'MAPPING' ? 'Columnas' : s === 'REVIEW' ? 'Validación' : 'Éxito'}
               </span>
-              {index < 3 && <ArrowRightIcon className="w-4 h-4 text-zinc-700 mx-2" />}
+              {index < 3 && <ArrowRightIcon className="w-4 h-4 text-[var(--text-muted)] mx-2" />}
             </div>
           )
         })}
       </div>
 
       {/* --- CONTENIDO POR PASO --- */}
-      <div className="rounded-[32px] border border-white/10 bg-[#0b0b0d] p-8 shadow-[0_20px_80px_rgba(0,0,0,0.35)] min-h-[400px]">
+      <div className="card rounded-xl border p-8 min-h-[400px]">
 
         {/* 1. UPLOAD */}
         {step === 'UPLOAD' && (
@@ -407,17 +404,17 @@ export default function ClientsUploadPage() {
 
             <div
               {...getRootProps()}
-              className={`w-full h-72 rounded-[24px] border-2 border-dashed flex flex-col items-center justify-center p-6 cursor-pointer transition-all duration-300
-                            ${isDragActive ? 'border-emerald-500 bg-emerald-500/5' : 'border-zinc-800 bg-black/20 hover:border-emerald-500/30 hover:bg-black/40'}`}
+              className={`w-full h-72 rounded-xl border-2 border-dashed flex flex-col items-center justify-center p-6 cursor-pointer transition-all duration-300
+                            ${isDragActive ? 'border-emerald-500 bg-emerald-500/5' : 'border-[var(--card-border)] bg-[var(--card-hover)] hover:border-emerald-500/30'}`}
             >
               <input {...getInputProps()} />
-              <div className={`w-16 h-16 rounded-full border border-white/5 flex items-center justify-center mb-6 transition-colors ${isDragActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-black/50 text-zinc-500'}`}>
+              <div className={`w-16 h-16 rounded-full border border-[var(--card-border)] flex items-center justify-center mb-6 transition-colors ${isDragActive ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400' : 'bg-[var(--badge-bg)] text-[var(--text-muted)]'}`}>
                 <CloudUploadIcon className="w-8 h-8" />
               </div>
-              <h3 className="text-lg font-medium text-white mb-2">
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
                 {isDragActive ? 'Suelta tu archivo aquí' : 'Arrastra tu archivo CSV o Excel'}
               </h3>
-              <p className="text-zinc-400 text-xs max-w-sm text-center">
+              <p className="text-[var(--text-muted)] text-xs max-w-sm text-center">
                 Se soportan archivos .csv, .xls y .xlsx.
               </p>
             </div>
@@ -427,29 +424,29 @@ export default function ClientsUploadPage() {
         {/* 2. MAPPING */}
         {step === 'MAPPING' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/10">
+            <div className="flex items-center justify-between mb-8 pb-6 border-b border-[var(--divider)]">
               <div>
-                <h3 className="text-lg font-medium text-white flex items-center gap-3">
-                  <FileTextIcon className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-lg font-medium text-[var(--text-primary)] flex items-center gap-3">
+                  <FileTextIcon className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                   {fileName}
                 </h3>
-                <p className="text-sm text-zinc-400 mt-1">Empareja las columnas de tu archivo con nuestra base de datos.</p>
+                <p className="text-sm text-[var(--text-muted)] mt-1">Empareja las columnas de tu archivo con nuestra base de datos.</p>
               </div>
               <div className="text-right">
-                <span className="text-2xl font-semibold text-white">{csvData.length}</span>
-                <p className="text-xs text-zinc-500 uppercase tracking-widest">Registros</p>
+                <span className="text-2xl font-semibold text-[var(--text-primary)]">{csvData.length}</span>
+                <p className="text-xs text-[var(--text-muted)] uppercase tracking-widest">Registros</p>
               </div>
             </div>
 
             {(mapping.phone || mapping.firstName || mapping.billingCycle) && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl mb-8">
-                <h4 className="text-emerald-400 font-semibold mb-3">Mapeo Automático Sugerido</h4>
-                <ul className="text-sm text-zinc-300 space-y-2 mb-4 leading-relaxed">
-                  {mapping.phone && <li>He detectado que la columna <strong className="text-white px-1.5 py-0.5 bg-black/30 rounded border border-white/10">{mapping.phone}</strong> corresponde a <strong className="text-white">Teléfono Móvil</strong>.</li>}
-                  {mapping.firstName && <li>He detectado que la columna <strong className="text-white px-1.5 py-0.5 bg-black/30 rounded border border-white/10">{mapping.firstName}</strong> corresponde a <strong className="text-white">Nombre</strong>.</li>}
-                  {mapping.billingCycle && <li>He detectado que la columna <strong className="text-white px-1.5 py-0.5 bg-black/30 rounded border border-white/10">{mapping.billingCycle}</strong> corresponde a <strong className="text-white">Ciclo de Cobro</strong>.</li>}
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-xl mb-8">
+                <h4 className="text-emerald-600 dark:text-emerald-400 font-semibold mb-3">Mapeo Automático Sugerido</h4>
+                <ul className="text-sm text-[var(--text-secondary)] space-y-2 mb-4 leading-relaxed">
+                  {mapping.phone && <li>He detectado que la columna <strong className="text-[var(--text-primary)] px-1.5 py-0.5 bg-[var(--card-hover)] rounded border border-[var(--card-border)]">{mapping.phone}</strong> corresponde a <strong className="text-[var(--text-primary)]">Teléfono Móvil</strong>.</li>}
+                  {mapping.firstName && <li>He detectado que la columna <strong className="text-[var(--text-primary)] px-1.5 py-0.5 bg-[var(--card-hover)] rounded border border-[var(--card-border)]">{mapping.firstName}</strong> corresponde a <strong className="text-[var(--text-primary)]">Nombre</strong>.</li>}
+                  {mapping.billingCycle && <li>He detectado que la columna <strong className="text-[var(--text-primary)] px-1.5 py-0.5 bg-[var(--card-hover)] rounded border border-[var(--card-border)]">{mapping.billingCycle}</strong> corresponde a <strong className="text-[var(--text-primary)]">Ciclo de Cobro</strong>.</li>}
                 </ul>
-                <p className="text-xs text-zinc-400 font-medium tracking-wide">— Por favor confirma o cambia las selecciones a continuación antes de revisar.</p>
+                <p className="text-xs text-[var(--text-muted)] font-medium tracking-wide">— Por favor confirma o cambia las selecciones a continuación antes de revisar.</p>
               </div>
             )}
 
@@ -477,7 +474,7 @@ export default function ClientsUploadPage() {
                     {f.label}
                   </label>
                   <select
-                    className="w-full sm:w-80 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                    className="w-full sm:w-80 bg-[var(--input-bg)] border border-[var(--input-border)] rounded-xl px-4 py-3 text-sm text-[var(--text-primary)] focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
                     value={mapping[f.key as keyof HeaderMapping] || ''}
                     onChange={(e) => setMapping(p => ({ ...p, [f.key as keyof HeaderMapping]: e.target.value || null }))}
                   >
@@ -528,14 +525,14 @@ export default function ClientsUploadPage() {
             </div>
 
             {/* Top Action Bar */}
-            <div className="flex items-center gap-4 p-4 rounded-2xl bg-black/20 border border-white/5 mb-6">
-              <div className="flex items-center gap-2 px-3 border-r border-white/10">
+            <div className="flex items-center gap-4 p-4 rounded-xl bg-[var(--card-hover)] border border-[var(--card-border)] mb-6">
+              <div className="flex items-center gap-2 px-3 border-r border-[var(--divider)]">
                 <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                <span className="text-sm text-white font-medium">{validCount} válidos</span>
+                <span className="text-sm text-[var(--text-primary)] font-medium">{validCount} válidos</span>
               </div>
               <div className="flex items-center gap-2 px-3">
                 <div className="w-2 h-2 rounded-full bg-red-500"></div>
-                <span className="text-sm text-white font-medium">{errorCount} con error</span>
+                <span className="text-sm text-[var(--text-primary)] font-medium">{errorCount} con error</span>
               </div>
               <div className="ml-auto">
                 {errorCount > 0 && (
@@ -551,54 +548,53 @@ export default function ClientsUploadPage() {
             </div>
 
             {/* Tabla */}
-            <div className="overflow-x-auto flex-1 border border-white/5 rounded-2xl bg-black/10">
-              <table className="w-full text-left text-sm text-zinc-300 whitespace-nowrap">
-                <thead className="bg-white/5 border-b border-white/10 text-xs uppercase tracking-wider text-zinc-500 sticky top-0">
+            <div className="overflow-x-auto flex-1 border border-[var(--card-border)] rounded-xl">
+              <table className="w-full text-left text-sm text-[var(--text-secondary)] whitespace-nowrap">
+                <thead className="bg-[var(--card-hover)] border-b border-[var(--divider)] text-xs uppercase tracking-wider text-[var(--text-muted)] sticky top-0">
                   <tr>
                     <th className="px-6 py-4 font-medium">Estado</th>
                     <th className="px-6 py-4 font-medium">Nombre Completo</th>
-                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.02]">
-                      Teléfono Crudo (Edita aquí)
+                    <th className="px-6 py-4 font-medium border-l border-[var(--divider)]">
+                      Teléfono (Edita aquí)
                     </th>
-                    <th className="px-6 py-4 font-medium border-l border-white/5">
-                      E.164 (Sistema Meta)
+                    <th className="px-6 py-4 font-medium border-l border-[var(--divider)]">
+                      E.164 (Meta)
                     </th>
-                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
+                    <th className="px-6 py-4 font-medium border-l border-[var(--divider)]">
                       Ciclo / Pago
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row) => (
-                    <tr key={row._id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                    <tr key={row._id} className="border-b border-[var(--divider)] hover:bg-[var(--card-hover)] transition-colors">
                       <td className="px-6 py-4">
                         {row.isValid ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 text-xs font-medium border border-emerald-500/20">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium border border-emerald-500/20">
                             <CheckIcon className="w-3 h-3" /> OK
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-red-500/10 text-red-400 text-xs font-medium border border-red-500/20 animate-pulse">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-red-500/10 text-red-500 text-xs font-medium border border-red-500/20 animate-pulse">
                             ERROR
                           </span>
                         )}
                       </td>
-                      <td className="px-6 py-4 font-medium text-white">
+                      <td className="px-6 py-4 font-medium text-[var(--text-primary)]">
                         {[row.firstName, row.lastName1, row.lastName2].filter(Boolean).join(' ')}
                       </td>
-                      <td className={`px-6 py-3 border-l border-white/5 bg-white/[0.01] ${!row.isValid && 'bg-red-500/5'}`}>
-                        {/* Inline Editor */}
+                      <td className={`px-6 py-3 border-l border-[var(--divider)] ${!row.isValid && 'bg-red-500/5'}`}>
                         <input
                           type="text"
                           value={row.phoneRaw}
                           onChange={(e) => handlePhoneEdit(row._id, e.target.value)}
-                          className={`bg-transparent w-full border-b border-transparent focus:border-white/50 focus:outline-none transition-colors px-1 py-1 ${!row.isValid ? 'text-red-300 font-semibold' : 'text-zinc-300'}`}
+                          className={`bg-transparent w-full border-b border-transparent focus:border-[var(--input-border)] focus:outline-none transition-colors px-1 py-1 ${!row.isValid ? 'text-red-500 font-semibold' : 'text-[var(--text-secondary)]'}`}
                           placeholder="Ingresa número"
                         />
                       </td>
-                      <td className="px-6 py-4 border-l border-white/5 font-mono text-xs text-zinc-500">
+                      <td className="px-6 py-4 border-l border-[var(--divider)] font-mono text-xs text-[var(--text-muted)]">
                         {row.isValid ? row.phoneE164 : '-'}
                       </td>
-                      <td className="px-6 py-4 border-l border-white/5 text-xs text-zinc-400 italic">
+                      <td className="px-6 py-4 border-l border-[var(--divider)] text-xs text-[var(--text-muted)] italic">
                         {row.billingCycleRaw || 'Defaults'} / {row.nextPaymentDateRaw || '---'}
                       </td>
                     </tr>
@@ -627,12 +623,12 @@ export default function ClientsUploadPage() {
         {/* 4. SUCCESS */}
         {step === 'SUCCESS' && (
           <div className="flex flex-col items-center justify-center h-[400px] text-center animate-in zoom-in-95 duration-500">
-            <div className="w-20 h-20 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-6 shadow-[0_0_40px_rgba(16,185,129,0.3)]">
-              <CheckIcon className="w-10 h-10 text-emerald-400" />
+            <div className="w-20 h-20 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mb-6">
+              <CheckIcon className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <h2 className="text-2xl font-semibold text-white mb-2">¡Importación Exitosa!</h2>
-            <p className="text-zinc-400 mb-8 max-w-md">
-              Se insertaron <strong>{importStats.success}</strong> clientes válidamente formateados en tu cuenta listos para mensajería.
+            <h2 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">¡Importación Exitosa!</h2>
+            <p className="text-[var(--text-muted)] mb-8 max-w-md">
+              Se insertaron <strong>{importStats.success}</strong> clientes válidamente formateados en tu cuenta, listos para mensajería.
             </p>
             <button
               onClick={() => {
@@ -648,7 +644,7 @@ export default function ClientsUploadPage() {
                   nextPaymentDate: null
                 });
               }}
-              className="bg-white/10 text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-white/20 transition-colors"
+              className="bg-[var(--badge-bg)] text-[var(--text-primary)] px-6 py-2.5 rounded-full text-sm font-medium hover:bg-[var(--card-hover)] border border-[var(--card-border)] transition-colors"
             >
               Subir otro archivo
             </button>
@@ -657,20 +653,20 @@ export default function ClientsUploadPage() {
       </div>
 
       {showOverwriteWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 animate-in fade-in duration-200">
-          <div className="bg-[#111] border border-red-500/30 rounded-3xl p-8 max-w-lg w-full shadow-[0_30px_100px_rgba(239,68,68,0.2)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 animate-in fade-in duration-200">
+          <div className="card border border-red-500/30 rounded-2xl p-8 max-w-lg w-full">
             <div className="w-14 h-14 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 flex items-center justify-center mb-6">
               <TrashIcon className="w-6 h-6" />
             </div>
-            <h3 className="text-2xl font-bold text-white mb-3">¿Sobrescribir Base de Datos?</h3>
-            <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
-              Al confirmar esta selección, <strong>se archivarán en la Papelera (Soft Delete) absolutamente todos tus contactos actuales activos</strong> previo a iniciar la importación del nuevo archivo.
+            <h3 className="text-xl font-bold text-[var(--text-primary)] mb-3">¿Sobrescribir Base de Datos?</h3>
+            <p className="text-sm text-[var(--text-muted)] mb-6 leading-relaxed">
+              Al confirmar esta selección, <strong className="text-[var(--text-primary)]">se archivarán en la Papelera (Soft Delete) absolutamente todos tus contactos actuales activos</strong> previo a iniciar la importación del nuevo archivo.
               Solo hazlo si deseas limpiar tu cartera de clientes y basarte puramente en este documento nuevo.
             </p>
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-8">
               <button
                 onClick={() => setShowOverwriteWarning(false)}
-                className="px-6 py-3 rounded-full text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+                className="px-6 py-3 rounded-full text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--card-hover)] transition-colors"
               >
                 Cancelar
               </button>

@@ -3,119 +3,189 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { logout } from '@/app/actions/auth';
+import { logout, getSessionUser } from '@/app/actions/auth';
+
+/* ── Icons ── */
+const HomeIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    <polyline points="9,22 9,12 15,12 15,22" />
+  </svg>
+);
+const ChatIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+  </svg>
+);
+const LayersIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2 2 7l10 5 10-5-10-5z" />
+    <path d="M2 17l10 5 10-5" />
+    <path d="M2 12l10 5 10-5" />
+  </svg>
+);
+const UploadIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <polyline points="17,8 12,3 7,8" />
+    <line x1="12" y1="3" x2="12" y2="15" />
+  </svg>
+);
+const UsersIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+    <circle cx="9" cy="7" r="4" />
+    <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+    <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+const SendIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="22" y1="2" x2="11" y2="13" />
+    <polygon points="22,2 15,22 11,13 2,9" />
+  </svg>
+);
+const ShieldIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+  </svg>
+);
+const SunIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" />
+  </svg>
+);
+const MoonIcon = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </svg>
+);
+const LogoutIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16,17 21,12 16,7" />
+    <line x1="21" y1="12" x2="9" y2="12" />
+  </svg>
+);
 
 const NAV_ITEMS = [
-    { href: '/dashboard', label: 'Inicio' },
-    { href: '/dashboard/conversations', label: 'Conversaciones' },
-    { href: '/dashboard/templates', label: 'Plantillas' },
-    { href: '/dashboard/clients', label: 'Importar Clientes' },
-    { href: '/dashboard/contacts', label: 'Contactos' },
-    { href: '/dashboard/campaigns', label: 'Envios' },
-    { href: '/dashboard/review', label: 'App Review' },
+  { href: '/dashboard',               label: 'Inicio',           Icon: HomeIcon },
+  { href: '/dashboard/conversations', label: 'Conversaciones',   Icon: ChatIcon },
+  { href: '/dashboard/templates',     label: 'Plantillas',       Icon: LayersIcon },
+  { href: '/dashboard/clients',       label: 'Importar',         Icon: UploadIcon },
+  { href: '/dashboard/contacts',      label: 'Contactos',        Icon: UsersIcon },
+  { href: '/dashboard/campaigns',     label: 'Envíos',           Icon: SendIcon },
+  { href: '/dashboard/review',        label: 'App Review',       Icon: ShieldIcon },
 ];
 
-export default function DashboardLayout({
-    children,
-}: {
-    children: React.ReactNode;
-}) {
-    const pathname = usePathname();
-    const [theme, setTheme] = useState<'dark' | 'light'>(() => {
-        if (typeof window === 'undefined') {
-            return 'dark';
-        }
+type UserInfo = { firstName: string; companyName: string; email: string } | null;
 
-        return window.localStorage.getItem('suscripta-dashboard-theme') === 'light'
-            ? 'light'
-            : 'dark';
-    });
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [user, setUser] = useState<UserInfo>(null);
 
-    useEffect(() => {
-        document.documentElement.dataset.dashboardTheme = theme;
-        window.localStorage.setItem('suscripta-dashboard-theme', theme);
-    }, [theme]);
+  useEffect(() => {
+    const saved = window.localStorage.getItem('suscripta-theme') === 'light' ? 'light' : 'dark';
+    setTheme(saved);
+  }, []);
 
-    return (
-        <div className="dashboard-shell flex h-screen overflow-hidden font-sans">
-            <aside className="dashboard-sidebar flex w-72 shrink-0 flex-col border-r border-white/10 px-5 py-6 backdrop-blur-xl">
-                <div className="mb-10">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#34d399,#059669)] shadow-[0_0_24px_rgba(16,185,129,0.32)]">
-                            <span className="text-lg font-bold leading-none text-black">S</span>
-                        </div>
-                        <div>
-                            <p className="text-lg font-semibold tracking-tight text-[color:var(--dashboard-text)]">Suscripta</p>
-                            <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--dashboard-muted)]">
-                                WhatsApp retention
-                            </p>
-                        </div>
-                        </div>
+  useEffect(() => {
+    const html = document.documentElement;
+    if (theme === 'dark') {
+      html.classList.add('dark');
+    } else {
+      html.classList.remove('dark');
+    }
+    window.localStorage.setItem('suscripta-theme', theme);
+  }, [theme]);
 
-                        <button
-                            type="button"
-                            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
-                            className="dashboard-theme-toggle rounded-full px-3 py-1.5 text-xs font-medium transition hover:opacity-90"
-                        >
-                            {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-                        </button>
-                    </div>
-                </div>
+  useEffect(() => {
+    getSessionUser().then(setUser);
+  }, []);
 
-                <nav className="space-y-2">
-                    {NAV_ITEMS.map((item) => {
-                        const isActive =
-                            item.href === '/dashboard'
-                                ? pathname === item.href
-                                : pathname?.startsWith(item.href);
+  const initials = user?.firstName?.[0]?.toUpperCase() ?? 'U';
 
-                        return (
-                            <Link
-                                key={item.href}
-                                href={item.href}
-                                className={`group flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-medium transition ${
-                                    isActive
-                                        ? 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300 shadow-[0_12px_30px_rgba(16,185,129,0.08)]'
-                                        : 'border border-transparent text-zinc-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white'
-                                }`}
-                            >
-                                <span>{item.label}</span>
-                                <span
-                                    className={`h-2.5 w-2.5 rounded-full transition ${
-                                        isActive
-                                            ? 'bg-emerald-400'
-                                            : 'bg-zinc-700 group-hover:bg-zinc-500'
-                                    }`}
-                                />
-                            </Link>
-                        );
-                    })}
-                </nav>
+  return (
+    <div className="flex h-screen overflow-hidden bg-[var(--bg-body)] text-[var(--text-primary)]">
 
-                <div className="mt-auto rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
-                    <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--dashboard-muted)]">Workspace</p>
-                    <p className="mt-3 text-base font-semibold text-[color:var(--dashboard-text)]">Usuario Prueba</p>
-                    <p className="mt-1 text-sm text-[color:var(--dashboard-muted)] mb-4">MVP privado para demo y App Review</p>
-                    
-                    <button 
-                        onClick={() => logout()}
-                        className="w-full py-2.5 px-4 rounded-xl border border-red-500/20 bg-red-500/10 text-red-400 text-sm font-medium hover:bg-red-500/20 transition-colors flex items-center justify-center gap-2 mt-4"
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                            <polyline points="16 17 21 12 16 7"></polyline>
-                            <line x1="21" y1="12" x2="9" y2="12"></line>
-                        </svg>
-                        Cerrar Sesión
-                    </button>
-                </div>
-            </aside>
+      {/* ── Sidebar ── */}
+      <aside className="sidebar flex w-60 shrink-0 flex-col border-r">
 
-            <main className="dashboard-main relative flex-1 overflow-y-auto">
-                <div className="absolute inset-0 z-[-1] bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,0.08),transparent_22%),radial-gradient(circle_at_top_right,rgba(255,255,255,0.03),transparent_18%)]" />
-                {children}
-            </main>
+        {/* Logo + theme toggle */}
+        <div className="flex items-center gap-2.5 px-4 py-4 border-b divider">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500 text-white font-bold text-xs shrink-0">
+            S
+          </div>
+          <span className="font-semibold text-[14px] tracking-tight text-[var(--text-primary)]">
+            Suscripta
+          </span>
+          <button
+            type="button"
+            onClick={() => setTheme(t => t === 'dark' ? 'light' : 'dark')}
+            className="ml-auto p-1.5 rounded-md text-[var(--text-muted)] hover:text-[var(--text-secondary)] hover:bg-[var(--nav-hover-bg)] transition-colors"
+            title={theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
+          >
+            {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </button>
         </div>
-    );
+
+        {/* Navigation */}
+        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
+          {NAV_ITEMS.map(({ href, label, Icon }) => {
+            const isActive = href === '/dashboard'
+              ? pathname === href
+              : pathname?.startsWith(href);
+
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-[var(--nav-active-bg)] text-[var(--nav-active-text)] border border-[var(--nav-active-border)]'
+                    : 'text-[var(--nav-text)] border border-transparent hover:bg-[var(--nav-hover-bg)] hover:text-[var(--text-secondary)]'
+                }`}
+              >
+                <span className={isActive ? 'text-[var(--nav-active-text)]' : 'text-[var(--text-muted)]'}>
+                  <Icon />
+                </span>
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        {/* User section */}
+        <div className="px-2 py-3 border-t divider space-y-1">
+          <div className="flex items-center gap-2.5 px-3 py-2 rounded-md">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-semibold text-xs shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-[var(--text-primary)] truncate">
+                {user?.firstName ?? '–'}
+              </p>
+              <p className="text-[11px] text-[var(--text-muted)] truncate">
+                {user?.companyName || user?.email || ''}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => logout()}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-md text-[13px] font-medium text-[var(--text-muted)] hover:bg-red-500/10 hover:text-red-500 transition-colors"
+          >
+            <LogoutIcon />
+            Cerrar sesión
+          </button>
+        </div>
+      </aside>
+
+      {/* ── Main content ── */}
+      <main className="main-content flex-1 overflow-y-auto">
+        {children}
+      </main>
+    </div>
+  );
 }
