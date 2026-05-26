@@ -38,7 +38,7 @@ export default function InlineCycleEditor({ customerId, billingCycle, nextPaymen
                     handleSave(e.target.value, date);
                 }}
                 disabled={isPending}
-                className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-xs text-zinc-300 focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
+                className="bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-2 py-1 text-xs text-[var(--text-secondary)] focus:border-emerald-500 focus:outline-none disabled:opacity-50 cursor-pointer"
             >
                 <option value="weekly">Semanal</option>
                 <option value="biweekly">Quincenal</option>
@@ -47,9 +47,9 @@ export default function InlineCycleEditor({ customerId, billingCycle, nextPaymen
                 <option value="biannual">Semestral</option>
                 <option value="annual">Anual</option>
             </select>
-            
-            <input 
-                type="date" 
+
+            <input
+                type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 onBlur={(e) => {
@@ -58,9 +58,8 @@ export default function InlineCycleEditor({ customerId, billingCycle, nextPaymen
                     }
                 }}
                 disabled={isPending}
-                className="bg-black/30 border border-white/10 rounded-lg px-2 py-1 text-[11px] text-zinc-400 focus:border-emerald-500 focus:outline-none focus:text-white disabled:opacity-50 appearance-none w-full cursor-pointer"
-                style={{ colorScheme: 'dark' }}
-                title="Fecha exacto del próximo cobro"
+                className="bg-[var(--input-bg)] border border-[var(--input-border)] rounded-lg px-2 py-1 text-[11px] text-[var(--text-muted)] focus:border-emerald-500 focus:outline-none disabled:opacity-50 w-full cursor-pointer"
+                title="Fecha exacta del próximo cobro"
             />
             
             {isPending && (
