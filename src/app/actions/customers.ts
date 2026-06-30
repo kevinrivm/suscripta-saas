@@ -27,6 +27,31 @@ interface CustomerInsertInput {
     nextPaymentDate?: string | null;
 }
 
+type CustomerPaymentStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
+
+interface CustomerUpsertPayload {
+    user_id: string;
+    phone_number: string;
+    first_name: string;
+    last_name_1: string | null;
+    last_name_2: string | null;
+    deleted_at: string | null;
+    is_active: boolean;
+    inactive_at: string | null;
+    billing_cycle?: string;
+    next_payment_date?: string;
+}
+
+interface CustomerCycleUpdatePayload {
+    billing_cycle: string;
+    next_payment_date: string | null;
+}
+
+interface CustomerReschedulePayload {
+    next_payment_date: string;
+    anchor_day?: number;
+}
+
 export async function uploadCustomersBatch(customers: CustomerInsertInput[], mode: 'append' | 'overwrite' = 'append') {
     try {
         const supabase = await createClient();
@@ -53,7 +78,7 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
         };
 
         const payload = customers.map((c) => {
-            const row: any = {
+            const row: CustomerUpsertPayload = {
                 user_id: user.id,
                 phone_number: c.phoneNumber,
                 first_name: c.firstName,
@@ -107,7 +132,7 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
 }
 
 // Acción de servidor para hacer Toggle de Pago
-export async function updateCustomerPaymentStatus(customerId: string, newStatus: 'pending' | 'paid' | 'overdue' | 'cancelled') {
+export async function updateCustomerPaymentStatus(customerId: string, newStatus: CustomerPaymentStatus) {
     try {
         const supabase = await createClient();
         
@@ -133,8 +158,7 @@ export async function updateCustomerCycle(customerId: string, billingCycle: stri
     try {
         const supabase = await createClient();
         
-        const payload: any = { billing_cycle: billingCycle };
-        payload.next_payment_date = nextPaymentDate || null;
+        const payload: CustomerCycleUpdatePayload = { billing_cycle: billingCycle, next_payment_date: nextPaymentDate || null };
 
         const { error } = await supabase
             .from('customers')
@@ -167,7 +191,7 @@ export async function reschedulePaymentDate(
     try {
         const supabase = await createClient();
 
-        const payload: Record<string, any> = {
+        const payload: CustomerReschedulePayload = {
             next_payment_date: newDate,
         };
 
@@ -205,7 +229,7 @@ export async function softDeleteCustomer(customerId: string) {
         
         if (error) return { ok: false, error: error.message };
         return { ok: true };
-    } catch (e) {
+    } catch {
         return { ok: false, error: 'Error al enviar a papelera.' };
     }
 }
@@ -225,7 +249,7 @@ export async function toggleCustomerActiveStatus(customerId: string, makeActive:
         
         if (error) return { ok: false, error: error.message };
         return { ok: true };
-    } catch (e) {
+    } catch {
         return { ok: false, error: 'Error al cambiar estado de actividad.' };
     }
 }
@@ -256,7 +280,7 @@ export async function addManualCustomer(customer: { phoneNumber: string, firstNa
 
         if (error) return { ok: false, error: error.message };
         return { ok: true };
-    } catch (e) {
+    } catch {
         return { ok: false, error: 'Error añadiendo cliente.' };
     }
 }

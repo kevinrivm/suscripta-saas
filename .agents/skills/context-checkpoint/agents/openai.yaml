@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context Checkpoint"
+  short_description: "Preserva contexto y handoff del proyecto"
+  default_prompt: "Use $context-checkpoint to update ai/AI_CONTEXT.md and ai/ENTRYPOINTS.md before ending this session."

@@ -60,8 +60,16 @@ function getStatusIcon(status: string) {
 export default async function DashboardOverviewPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  // Extraer el primer nombre si existe en el metadata
-  const userName = user?.user_metadata?.full_name?.split(' ')[0] || 'Administrador';
+  const { data: profile } = user
+    ? await supabase
+      .from('profiles')
+      .select('first_name, company_name')
+      .eq('id', user.id)
+      .maybeSingle()
+    : { data: null };
+  const metadata = user?.user_metadata as { first_name?: string; full_name?: string } | undefined;
+  const emailFallback = user?.email?.split('@')[0]?.replace(/[._-]+/g, ' ');
+  const userName = profile?.first_name ?? metadata?.first_name ?? metadata?.full_name?.split(' ')[0] ?? emailFallback ?? 'Usuario';
 
   const workspace = await getWhatsAppWorkspaceBundle(60);
   const approvedTemplates = workspace.templates.filter(

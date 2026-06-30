@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
-import { useDropzone, FileRejection, DropEvent } from 'react-dropzone';
+import { useState, useCallback } from 'react';
+import { useDropzone } from 'react-dropzone';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
-import { parsePhoneNumber, isValidPhoneNumber, CountryCode } from 'libphonenumber-js';
+import { parsePhoneNumber, CountryCode } from 'libphonenumber-js';
 import { uploadCustomersBatch } from '@/app/actions/customers';
 
 // ====== ICÓNS SVGs (In-line para mantener integridad gráfica) ======
@@ -51,6 +51,13 @@ type HeaderMapping = {
   billingCycle: string | null;
   nextPaymentDate: string | null;
 };
+type SpreadsheetCell = string | number | boolean | Date | null | undefined;
+type SpreadsheetRow = Record<string, SpreadsheetCell>;
+type MappingField = {
+  key: keyof HeaderMapping;
+  label: string;
+  req: boolean;
+};
 interface PreviewRow {
   _id: string; // Internal id
   phoneRaw: string;
@@ -79,6 +86,15 @@ const COMMON_COUNTRIES: { code: string, label: string }[] = [
   { code: 'PE', label: '🇵🇪 Perú (+51)' },
 ];
 
+const MAPPING_FIELDS: MappingField[] = [
+  { key: 'firstName', label: 'Nombre (Required)*', req: true },
+  { key: 'lastName1', label: 'Apellido Paterno', req: false },
+  { key: 'lastName2', label: 'Apellido Materno', req: false },
+  { key: 'phone', label: 'Teléfono Móvil (Required)*', req: true },
+  { key: 'billingCycle', label: 'Ciclo (Mensual, Anual) Opcional', req: false },
+  { key: 'nextPaymentDate', label: 'Fecha de Próx. Pago Opcional', req: false }
+];
+
 export default function ClientsUploadPage() {
   const [step, setStep] = useState<FlowStep>('UPLOAD');
   const [processing, setProcessing] = useState(false);
@@ -90,7 +106,7 @@ export default function ClientsUploadPage() {
 
   // File Parsing State
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
-  const [csvData, setCsvData] = useState<any[]>([]);
+  const [csvData, setCsvData] = useState<SpreadsheetRow[]>([]);
   const [fileName, setFileName] = useState('');
 
   // Mapping State
@@ -135,7 +151,7 @@ export default function ClientsUploadPage() {
     setFileName(file.name);
     setProcessing(true);
 
-    const performAutoMapping = (data: any[], headers: string[]) => {
+    const performAutoMapping = (data: SpreadsheetRow[], headers: string[]) => {
       setCsvHeaders(headers);
       setCsvData(data);
 
@@ -167,7 +183,7 @@ export default function ClientsUploadPage() {
 
           if (json.length > 0) {
             const headers = Object.keys(json[0] as object);
-            performAutoMapping(json, headers);
+            performAutoMapping(json as SpreadsheetRow[], headers);
           } else {
             alert("El archivo Excel está vacío o no contiene registros válidos.");
             setProcessing(false);
@@ -186,7 +202,7 @@ export default function ClientsUploadPage() {
         skipEmptyLines: true,
         complete: (results) => {
           const headers = results.meta.fields || [];
-          performAutoMapping(results.data, headers);
+          performAutoMapping(results.data as SpreadsheetRow[], headers);
         },
         error: (err) => {
           console.error("CSV Parse Error:", err);
@@ -219,7 +235,7 @@ export default function ClientsUploadPage() {
 
     // Pre-validación de formatos incompatibles
     let localFormatError = null;
-    for (let row of csvData) {
+    for (const row of csvData) {
       const phoneVal = row[mapping.phone!];
       if (phoneVal && /[a-zA-Z]{4,}/.test(String(phoneVal))) {
         localFormatError = `La columna de Teléfono contiene demasiado texto ("${phoneVal}"). Edita tu archivo y asegúrate de que sean números validos.`;
@@ -266,18 +282,18 @@ export default function ClientsUploadPage() {
              anyAutoFilled = true;
           }
         }
-      } catch (e) {
+      } catch {
         // Formatting err, valid=false
       }
 
       return {
         _id: `row-${index}`,
         phoneRaw: phoneRawStr,
-        firstName: row[mapping.firstName!] || '',
-        lastName1: mapping.lastName1 ? (row[mapping.lastName1] || '') : '',
-        lastName2: mapping.lastName2 ? (row[mapping.lastName2] || '') : '',
-        billingCycleRaw: mapping.billingCycle ? (row[mapping.billingCycle] || '') : '',
-        nextPaymentDateRaw: mapping.nextPaymentDate ? (row[mapping.nextPaymentDate] || '') : '',
+        firstName: String(row[mapping.firstName!] || ''),
+        lastName1: mapping.lastName1 ? String(row[mapping.lastName1] || '') : '',
+        lastName2: mapping.lastName2 ? String(row[mapping.lastName2] || '') : '',
+        billingCycleRaw: mapping.billingCycle ? String(row[mapping.billingCycle] || '') : '',
+        nextPaymentDateRaw: mapping.nextPaymentDate ? String(row[mapping.nextPaymentDate] || '') : '',
         isValid: valid,
         phoneE164: formattedPhoneE164,
         phoneIntl: formattedPhoneIntl,
@@ -315,7 +331,7 @@ export default function ClientsUploadPage() {
           formattedPhoneE164 = phoneNumber.format('E.164');
           formattedPhoneIntl = phoneNumber.formatInternational();
         }
-      } catch (e) {
+      } catch {
         // error = ignore
       }
 
@@ -356,7 +372,7 @@ export default function ClientsUploadPage() {
              anyAutoFilled = true;
           }
         }
-      } catch (e) { }
+      } catch { }
       return { ...row, isValid: valid, phoneE164: formattedPhoneE164, phoneIntl: formattedPhoneIntl, wasAutoFilled: autoFilled };
     }));
     setShowAutoFillWarning(anyAutoFilled);
@@ -525,22 +541,15 @@ export default function ClientsUploadPage() {
             )}
 
             <div className="grid gap-6">
-              {[
-                { key: 'firstName', label: 'Nombre (Required)*', req: true },
-                { key: 'lastName1', label: 'Apellido Paterno', req: false },
-                { key: 'lastName2', label: 'Apellido Materno', req: false },
-                { key: 'phone', label: 'Teléfono Móvil (Required)*', req: true },
-                { key: 'billingCycle', label: 'Ciclo (Mensual, Anual) Opcional', req: false },
-                { key: 'nextPaymentDate', label: 'Fecha de Próx. Pago Opcional', req: false }
-              ].map((f) => (
+              {MAPPING_FIELDS.map((f) => (
                 <div key={f.key} className="grid sm:grid-cols-[200px_1fr] items-center gap-4">
                   <label className={`text-sm font-medium ${f.req ? 'text-white' : 'text-zinc-400'}`}>
                     {f.label}
                   </label>
                   <select
                     className="w-full sm:w-80 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
-                    value={(mapping as any)[f.key] || ''}
-                    onChange={(e) => setMapping(p => ({ ...p, [f.key as keyof HeaderMapping]: e.target.value || null }))}
+                    value={mapping[f.key] || ''}
+                    onChange={(e) => setMapping(p => ({ ...p, [f.key]: e.target.value || null }))}
                   >
                     <option value="">-- Ignorar (No importar) --</option>
                     {csvHeaders.map(h => (
@@ -595,7 +604,7 @@ export default function ClientsUploadPage() {
                 <div>
                   <h4 className="text-yellow-500 font-semibold text-sm mb-1.5">Códigos de País Inferidos</h4>
                   <p className="text-sm text-yellow-500/80 leading-relaxed font-medium">
-                    Hemos detectado números "locales" en tu Excel que no tenían código internacional (como +52 o +1). 
+                    Hemos detectado números &quot;locales&quot; en tu Excel que no tenían código internacional (como +52 o +1). 
                     El sistema ha utilizado el <strong>País Base seleccionado</strong> arriba para unificarlos.
                     Si algún número pertenece a otro país, asigńale su código local en la columna de revisión.
                   </p>

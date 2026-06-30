@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { logout } from '@/app/actions/auth';
+import DashboardAccountSummary from '@/components/dashboard/DashboardAccountSummary';
 
 type NavItem = {
     href: string;
@@ -24,6 +25,7 @@ const NAV_ITEMS: NavItem[] = [
     },
     { href: '/dashboard/campaigns', label: 'Envios' },
     { href: '/dashboard/review', label: 'App Review' },
+    { href: '/dashboard/account', label: 'Mi cuenta' },
 ];
 
 export default function DashboardLayout({
@@ -133,9 +135,7 @@ export default function DashboardLayout({
                 </nav>
 
                 <div className="mt-auto rounded-[28px] border border-white/10 bg-white/[0.03] p-5">
-                    <p className="text-xs uppercase tracking-[0.2em] text-[color:var(--dashboard-muted)]">Workspace</p>
-                    <p className="mt-3 text-base font-semibold text-[color:var(--dashboard-text)]">Usuario Prueba</p>
-                    <p className="mt-1 text-sm text-[color:var(--dashboard-muted)] mb-4">MVP privado para demo y App Review</p>
+                    <DashboardAccountSummary />
                     
                     <button 
                         onClick={() => logout()}

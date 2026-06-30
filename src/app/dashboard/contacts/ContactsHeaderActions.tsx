@@ -1,12 +1,24 @@
 // src/app/dashboard/contacts/ContactsHeaderActions.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { addManualCustomer } from '@/app/actions/customers';
 
-export default function ContactsHeaderActions({ currentTab, rawData }: { currentTab: string, rawData: any[] }) {
+interface ContactExportRow {
+    id?: string | number | null;
+    phone_number?: string | null;
+    first_name?: string | null;
+    last_name_1?: string | null;
+    last_name_2?: string | null;
+    billing_cycle?: string | null;
+    payment_status?: string | null;
+    is_active?: boolean | null;
+    deleted_at?: string | null;
+}
+
+export default function ContactsHeaderActions({ currentTab, rawData }: { currentTab: string, rawData: ContactExportRow[] }) {
     const [isExporting, setIsExporting] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     
@@ -39,7 +51,7 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
         }
     };
 
-    const handleAdd = async (e: any) => {
+    const handleAdd = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsSubmitting(true);
         const res = await addManualCustomer({ phoneNumber: mPhone, firstName: mName, lastName1: mLast, billingCycle: mCycle });

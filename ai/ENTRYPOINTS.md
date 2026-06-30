@@ -10,7 +10,12 @@ High-level system overview, business rules, and current project state.
 
 ---
 
-### 2. package.json
+### 2. docs/retake_suscripta.md
+Summary of CRM Phase 4 database mutations, server actions (soft-deletes, resurrection), and Meta integration tests recovery.
+
+---
+
+### 3. package.json
 Use this file to identify:
 - tech stack
 - key dependencies
@@ -18,7 +23,7 @@ Use this file to identify:
 
 ---
 
-### 3. supabase_setup.sql
+### 4. supabase_setup.sql
 Defines:
 - data model
 - multi-tenant structure
@@ -31,35 +36,35 @@ Read this file if:
 
 ---
 
-### 4. src/middleware.ts
+### 5. src/middleware.ts
 Defines:
 - protected routes
 - session handling logic
 
 ---
 
-### 5. src/utils/supabase/middleware.ts
+### 6. src/utils/supabase/middleware.ts
 Complements:
 - Supabase session handling
 - cookie management
 
 ---
 
-### 6. src/app/actions/auth.ts
+### 7. src/app/actions/auth.ts
 Defines:
 - authentication flow
 - error handling strategy
 
 ---
 
-### 7. src/app/actions/customers.ts
+### 8. src/app/actions/customers.ts
 Defines:
 - core business logic
 - customer-related operations
 
 ---
 
-### 8. docs/ESTADO_DEL_SISTEMA.md
+### 9. docs/ESTADO_DEL_SISTEMA.md
 Provides:
 - architectural decisions
 - external integrations (WhatsApp, OAuth, Webhooks)

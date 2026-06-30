@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local agent configuration
+.codex/config.toml
+
+# local database backup utilities and exports
+backups/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

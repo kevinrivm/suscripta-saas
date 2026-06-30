@@ -36,7 +36,7 @@ export default function Home() {
           </div>
 
           <h1 className="text-5xl md:text-7xl font-bold tracking-tighter max-w-4xl mb-6 bg-clip-text text-transparent bg-gradient-to-b from-white to-zinc-500 leading-tight">
-            Reduce tu <span className="text-emerald-400 text-glow">Churn</span> en piloto automático.
+            Evita <span className="text-emerald-400 text-glow">pagos olvidados</span> en piloto automático.
           </h1>
 
           <p className="text-lg md:text-xl text-zinc-400 max-w-2xl mb-10 leading-relaxed font-light">

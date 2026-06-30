@@ -1,0 +1,68 @@
+# Project-local Codex execution policy.
+# Keep destructive commands blocked even if a future prompt or tool call asks for them.
+
+prefix_rule(
+    pattern = ["rm", "-rf"],
+    decision = "forbidden",
+    justification = "Recursive force deletion is blocked in this project. Ask the user for an explicit cleanup plan.",
+    match = [
+        "rm -rf node_modules",
+        "rm -rf .next",
+    ],
+)
+
+prefix_rule(
+    pattern = ["rm", "-fr"],
+    decision = "forbidden",
+    justification = "Recursive force deletion is blocked in this project. Ask the user for an explicit cleanup plan.",
+    match = [
+        "rm -fr node_modules",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "reset", "--hard"],
+    decision = "forbidden",
+    justification = "Hard resets can destroy local work. Inspect git status and ask for explicit user confirmation instead.",
+    match = [
+        "git reset --hard",
+        "git reset --hard HEAD~1",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "clean", "-fd"],
+    decision = "forbidden",
+    justification = "git clean can delete untracked work. Ask for explicit user confirmation and a dry run first.",
+    match = [
+        "git clean -fd",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "clean", "-fdx"],
+    decision = "forbidden",
+    justification = "git clean -fdx can delete ignored and untracked work. Ask for explicit user confirmation and a dry run first.",
+    match = [
+        "git clean -fdx",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "prompt",
+    justification = "Force pushes rewrite remote history and require explicit approval.",
+    match = [
+        "git push --force",
+        "git push --force origin fix/mejora-formato-telefonos-upload",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force-with-lease"],
+    decision = "prompt",
+    justification = "Force-with-lease rewrites remote history and requires explicit approval.",
+    match = [
+        "git push --force-with-lease",
+    ],
+)
