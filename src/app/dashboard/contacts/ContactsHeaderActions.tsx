@@ -1,9 +1,10 @@
 // src/app/dashboard/contacts/ContactsHeaderActions.tsx
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { parsePhoneNumber, type CountryCode } from 'libphonenumber-js';
 import { addManualCustomer } from '@/app/actions/customers';
 
 interface ContactExportRow {
@@ -18,16 +19,52 @@ interface ContactExportRow {
     deleted_at?: string | null;
 }
 
+const COMMON_COUNTRIES: { code: CountryCode, label: string, placeholder: string }[] = [
+    { code: 'MX', label: 'México (+52)', placeholder: '55 5123 4567' },
+    { code: 'US', label: 'Estados Unidos (+1)', placeholder: '555 123 4567' },
+    { code: 'CO', label: 'Colombia (+57)', placeholder: '300 123 4567' },
+    { code: 'ES', label: 'España (+34)', placeholder: '612 34 56 78' },
+    { code: 'CL', label: 'Chile (+56)', placeholder: '9 1234 5678' },
+    { code: 'AR', label: 'Argentina (+54)', placeholder: '11 2345 6789' },
+    { code: 'PE', label: 'Perú (+51)', placeholder: '912 345 678' },
+];
+
+const BILLING_CYCLES = [
+    { value: 'weekly', label: 'Semanal' },
+    { value: 'biweekly', label: 'Quincenal' },
+    { value: 'monthly', label: 'Mensual' },
+    { value: 'bimonthly', label: 'Bimestral' },
+    { value: 'quarterly', label: 'Trimestral' },
+    { value: 'biannual', label: 'Semestral' },
+    { value: 'annual', label: 'Anual' },
+];
+
+function getBrowserCountry(): CountryCode {
+    const localeRegion = navigator.language.split('-')[1]?.toUpperCase();
+    const supported = COMMON_COUNTRIES.find((country) => country.code === localeRegion);
+
+    return supported?.code ?? 'MX';
+}
+
 export default function ContactsHeaderActions({ currentTab, rawData }: { currentTab: string, rawData: ContactExportRow[] }) {
     const [isExporting, setIsExporting] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     
     const [mPhone, setMPhone] = useState('');
+    const [mCountry, setMCountry] = useState<CountryCode>('MX');
     const [mName, setMName] = useState('');
-    const [mLast, setMLast] = useState('');
+    const [mLast1, setMLast1] = useState('');
+    const [mLast2, setMLast2] = useState('');
     const [mCycle, setMCycle] = useState('monthly');
+    const [mNextPaymentDate, setMNextPaymentDate] = useState('');
+    const [mPaymentDay, setMPaymentDay] = useState('');
+    const [formError, setFormError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
+
+    useEffect(() => {
+        setMCountry(getBrowserCountry());
+    }, []);
 
     const handleExport = () => {
         setIsExporting(true);
@@ -53,15 +90,66 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
 
     const handleAdd = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        setFormError(null);
+
+        if (!mPhone.trim() || !mName.trim() || !mCycle) {
+            setFormError('Teléfono, Nombre(s) y Frecuencia de pago son obligatorios.');
+            return;
+        }
+
+        if (!mNextPaymentDate && !mPaymentDay.trim()) {
+            setFormError('Agrega Fecha de próximo pago o Día de pago para automatizar recordatorios.');
+            return;
+        }
+
+        if (mPaymentDay.trim()) {
+            const paymentDay = Number(mPaymentDay);
+            const maxPaymentDay = mCycle === 'weekly' || mCycle === 'biweekly' ? 7 : 31;
+            if (!Number.isInteger(paymentDay) || paymentDay < 1 || paymentDay > maxPaymentDay) {
+                setFormError(mCycle === 'weekly' || mCycle === 'biweekly'
+                    ? 'Para frecuencia semanal o quincenal, Día de pago debe estar entre 1 y 7.'
+                    : 'Día de pago debe estar entre 1 y 31.');
+                return;
+            }
+        }
+
+        let formattedPhone = '';
+        try {
+            const phone = parsePhoneNumber(mPhone.trim(), mCountry);
+            if (!phone?.isValid()) {
+                setFormError('Ingresa un teléfono móvil válido para el país seleccionado.');
+                return;
+            }
+            formattedPhone = phone.format('E.164');
+        } catch {
+            setFormError('Ingresa un teléfono móvil válido para el país seleccionado.');
+            return;
+        }
+
         setIsSubmitting(true);
-        const res = await addManualCustomer({ phoneNumber: mPhone, firstName: mName, lastName1: mLast, billingCycle: mCycle });
+        const res = await addManualCustomer({
+            phoneNumber: formattedPhone,
+            firstName: mName.trim(),
+            lastName1: mLast1.trim(),
+            lastName2: mLast2.trim(),
+            billingCycle: mCycle,
+            nextPaymentDate: mNextPaymentDate || null,
+            paymentDay: mPaymentDay.trim() || null
+        });
         setIsSubmitting(false);
         if (res.ok) {
             setIsModalOpen(false);
-            setMPhone(''); setMName(''); setMLast('');
+            setMPhone('');
+            setMName('');
+            setMLast1('');
+            setMLast2('');
+            setMCycle('monthly');
+            setMNextPaymentDate('');
+            setMPaymentDay('');
+            setFormError(null);
             router.refresh();
         } else {
-            alert('Error al guardar: ' + res.error);
+            setFormError(res.error || 'No se pudo guardar el cliente.');
         }
     };
 
@@ -103,34 +191,75 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
             {/* Modal Añadir Manual */}
             {isModalOpen && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-[#0b0b0d] border border-white/10 rounded-3xl p-8 max-w-sm w-full shadow-[0_40px_100px_rgba(0,0,0,0.5)] relative">
-                        <button onClick={() => setIsModalOpen(false)} className="absolute top-5 right-5 text-zinc-500 hover:text-white bg-white/5 rounded-full p-2">✕</button>
+                    <div className="bg-[#0b0b0d] border border-white/10 rounded-3xl p-8 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-[0_40px_100px_rgba(0,0,0,0.5)] relative">
+                        <button onClick={() => setIsModalOpen(false)} className="absolute top-5 right-5 text-zinc-500 hover:text-white bg-white/5 rounded-full p-2">x</button>
                         <h3 className="text-xl font-bold text-white mb-6">Nuevo Contacto (1-1)</h3>
                         <form onSubmit={handleAdd} className="space-y-4">
                             <div>
                                 <label className="text-xs text-emerald-400 font-medium ml-1">Teléfono Móvil *</label>
-                                <input required type="text" value={mPhone} onChange={e=>setMPhone(e.target.value)} placeholder="+52 555 123 4567" className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors" />
+                                <div className="mt-1 grid grid-cols-[150px_1fr] gap-2">
+                                    <select
+                                        value={mCountry}
+                                        onChange={e => setMCountry(e.target.value as CountryCode)}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors cursor-pointer"
+                                    >
+                                        {COMMON_COUNTRIES.map((country) => (
+                                            <option key={country.code} value={country.code}>{country.label}</option>
+                                        ))}
+                                    </select>
+                                    <input
+                                        required
+                                        type="tel"
+                                        value={mPhone}
+                                        onChange={e => setMPhone(e.target.value)}
+                                        placeholder={COMMON_COUNTRIES.find(country => country.code === mCountry)?.placeholder ?? '55 5123 4567'}
+                                        className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors"
+                                    />
+                                </div>
                             </div>
                             <div>
-                                <label className="text-xs text-zinc-400 font-medium ml-1">Nombre (First Name) *</label>
+                                <label className="text-xs text-zinc-400 font-medium ml-1">Nombre(s) *</label>
                                 <input required type="text" value={mName} onChange={e=>setMName(e.target.value)} placeholder="Ej. Ana" className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors" />
                             </div>
-                            <div>
-                                <label className="text-xs text-zinc-400 font-medium ml-1">Apellidos (Opcional)</label>
-                                <input type="text" value={mLast} onChange={e=>setMLast(e.target.value)} placeholder="Ej. López" className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors" />
+                            <div className="grid sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs text-zinc-400 font-medium ml-1">Apellido paterno</label>
+                                    <input type="text" value={mLast1} onChange={e=>setMLast1(e.target.value)} placeholder="Ej. López" className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-400 font-medium ml-1">Apellido materno</label>
+                                    <input type="text" value={mLast2} onChange={e=>setMLast2(e.target.value)} placeholder="Ej. García" className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors" />
+                                </div>
                             </div>
                             <div>
-                                <label className="text-xs text-zinc-400 font-medium ml-1">Ciclo de Facturación Preferido</label>
-                                <select value={mCycle} onChange={e=>setMCycle(e.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors cursor-pointer appearance-none">
-                                    <option value="weekly">Semanal</option>
-                                    <option value="biweekly">Quincenal</option>
-                                    <option value="monthly">Mensual</option>
-                                    <option value="annual">Anual</option>
+                                <label className="text-xs text-zinc-400 font-medium ml-1">Frecuencia de pago *</label>
+                                <select required value={mCycle} onChange={e=>setMCycle(e.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors cursor-pointer appearance-none">
+                                    {BILLING_CYCLES.map((cycle) => (
+                                        <option key={cycle.value} value={cycle.value}>{cycle.label}</option>
+                                    ))}
                                 </select>
                             </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                                <div>
+                                    <label className="text-xs text-zinc-400 font-medium ml-1">Fecha de próximo pago</label>
+                                    <input type="date" value={mNextPaymentDate} onChange={e=>setMNextPaymentDate(e.target.value)} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors" style={{ colorScheme: 'dark' }} />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-zinc-400 font-medium ml-1">Día de pago</label>
+                                    <input type="number" min={1} max={mCycle === 'weekly' || mCycle === 'biweekly' ? 7 : 31} value={mPaymentDay} onChange={e=>setMPaymentDay(e.target.value)} placeholder={mCycle === 'weekly' || mCycle === 'biweekly' ? '1-7' : '1-31'} className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors" />
+                                </div>
+                            </div>
+                            <p className="text-xs leading-5 text-zinc-500">
+                                Para automatizar recordatorios, agrega Fecha de próximo pago o Día de pago. En semanal/quincenal, el día usa 1-7.
+                            </p>
+                            {formError && (
+                                <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs leading-5 text-red-300">
+                                    {formError}
+                                </div>
+                            )}
                             <div className="pt-4">
                                 <button type="submit" disabled={isSubmitting} className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3.5 rounded-xl font-bold transition-all shadow-[0_0_15px_rgba(16,185,129,0.2)]">
-                                    {isSubmitting ? 'Guardando...' : 'Insertar a BD Local'}
+                                    {isSubmitting ? 'Guardando...' : 'Agregar cliente'}
                                 </button>
                             </div>
                         </form>

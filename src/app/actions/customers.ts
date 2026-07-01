@@ -1,16 +1,17 @@
 'use server';
 
 import { createClient } from '@/utils/supabase/server';
+import { getAnchorDayFromPaymentDate, getInitialNextPaymentDate, parsePaymentDay } from '@/utils/customers/billing-cycles';
 
 /*
     ================================================================================
     NOTA DE ARQUITECTURA PARA EL DESARROLLADOR BACKEND:
     ================================================================================
-    IMPORTANTE: El motor de envíos de WhatsApp (cron jobs, colas o triggers) 
-    SOLO deberá procesar y enviar recordatorios a los clientes cuyo campo 
-    `payment_status` se encuentre exclusivamente en los estados:
-      - 'pending'
-      - 'overdue'
+    IMPORTANTE: El motor de envíos de WhatsApp (cron jobs, colas o triggers)
+    SOLO deberá procesar y enviar recordatorios a clientes activos cuyo
+    `payment_status` sea 'pending'. La condición 'overdue' NO es un estado
+    manual: se deriva de `next_payment_date < hoy`. Un proceso automático
+    debe avanzar `next_payment_date` al iniciar cada nuevo ciclo.
 
     Cualquier cliente con `payment_status` === 'paid' o 'cancelled' DEBE ser 
     estrictamente excluido del embudo de notificaciones de cobranza.
@@ -22,12 +23,13 @@ interface CustomerInsertInput {
     firstName: string;
     lastName1?: string | null;
     lastName2?: string | null;
-    payment_status?: 'pending' | 'paid' | 'overdue' | 'cancelled';
+    payment_status?: CustomerPaymentStatus;
     billingCycle?: string | null;
     nextPaymentDate?: string | null;
+    paymentDay?: string | number | null;
 }
 
-type CustomerPaymentStatus = 'pending' | 'paid' | 'overdue' | 'cancelled';
+type CustomerPaymentStatus = 'pending' | 'paid' | 'cancelled';
 
 interface CustomerUpsertPayload {
     user_id: string;
@@ -40,6 +42,7 @@ interface CustomerUpsertPayload {
     inactive_at: string | null;
     billing_cycle?: string;
     next_payment_date?: string;
+    anchor_day?: number;
 }
 
 interface CustomerCycleUpdatePayload {
@@ -78,6 +81,7 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
         };
 
         const payload = customers.map((c) => {
+            const paymentDay = parsePaymentDay(c.paymentDay);
             const row: CustomerUpsertPayload = {
                 user_id: user.id,
                 phone_number: c.phoneNumber,
@@ -93,7 +97,21 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
                 // Solo guardar si el ciclo es reconocido; si no, dejar null para revisión manual
                 if (normalized) row.billing_cycle = normalized;
             }
-            if (c.nextPaymentDate) row.next_payment_date = c.nextPaymentDate;
+            const validPaymentDay = paymentDay && paymentDay >= 1 && paymentDay <= 31
+                && (row.billing_cycle === 'weekly' || row.billing_cycle === 'biweekly' ? paymentDay <= 7 : true);
+            if (c.nextPaymentDate) {
+                row.next_payment_date = c.nextPaymentDate;
+            } else if (validPaymentDay && row.billing_cycle) {
+                const calculatedDate = getInitialNextPaymentDate({
+                    paymentDay,
+                    billingCycle: row.billing_cycle,
+                });
+                if (calculatedDate) row.next_payment_date = calculatedDate;
+            }
+            const anchorDay = validPaymentDay
+                ? paymentDay
+                : getAnchorDayFromPaymentDate(row.next_payment_date, row.billing_cycle);
+            if (anchorDay) row.anchor_day = anchorDay;
             return row;
         });
 
@@ -150,6 +168,29 @@ export async function updateCustomerPaymentStatus(customerId: string, newStatus:
     } catch (error) {
         console.error('[Suscripta] Excepción actualizando pago', error);
         return { ok: false, error: 'Error desconocido al actualizar pago.' };
+    }
+}
+
+export async function bulkUpdateCustomerPaymentStatus(customerIds: string[], newStatus: CustomerPaymentStatus) {
+    try {
+        if (!customerIds.length) return { ok: false, error: 'No hay clientes seleccionados.' };
+
+        const supabase = await createClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+            return { ok: false, error: 'Acceso no autorizado.' };
+        }
+
+        const { error } = await supabase
+            .from('customers')
+            .update({ payment_status: newStatus })
+            .eq('user_id', user.id)
+            .in('id', customerIds);
+
+        if (error) return { ok: false, error: error.message };
+        return { ok: true };
+    } catch {
+        return { ok: false, error: 'Error al actualizar clientes seleccionados.' };
     }
 }
 
@@ -234,6 +275,29 @@ export async function softDeleteCustomer(customerId: string) {
     }
 }
 
+export async function bulkSoftDeleteCustomers(customerIds: string[]) {
+    try {
+        if (!customerIds.length) return { ok: false, error: 'No hay clientes seleccionados.' };
+
+        const supabase = await createClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+            return { ok: false, error: 'Acceso no autorizado.' };
+        }
+
+        const { error } = await supabase
+            .from('customers')
+            .update({ deleted_at: new Date().toISOString(), is_active: false })
+            .eq('user_id', user.id)
+            .in('id', customerIds);
+
+        if (error) return { ok: false, error: error.message };
+        return { ok: true };
+    } catch {
+        return { ok: false, error: 'Error al enviar clientes seleccionados a papelera.' };
+    }
+}
+
 // Backend - Inactivar / Pausar
 export async function toggleCustomerActiveStatus(customerId: string, makeActive: boolean) {
     try {
@@ -254,14 +318,69 @@ export async function toggleCustomerActiveStatus(customerId: string, makeActive:
     }
 }
 
+export async function bulkUpdateCustomerActiveStatus(customerIds: string[], makeActive: boolean) {
+    try {
+        if (!customerIds.length) return { ok: false, error: 'No hay clientes seleccionados.' };
+
+        const supabase = await createClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+            return { ok: false, error: 'Acceso no autorizado.' };
+        }
+
+        const { error } = await supabase
+            .from('customers')
+            .update({
+                is_active: makeActive,
+                inactive_at: makeActive ? null : new Date().toISOString()
+            })
+            .eq('user_id', user.id)
+            .in('id', customerIds);
+
+        if (error) return { ok: false, error: error.message };
+        return { ok: true };
+    } catch {
+        return { ok: false, error: 'Error al cambiar estatus de clientes seleccionados.' };
+    }
+}
+
 // Backend - Añadir Cliente Manual (Unitario)
-export async function addManualCustomer(customer: { phoneNumber: string, firstName: string, lastName1?: string, lastName2?: string, billingCycle: string }) {
+export async function addManualCustomer(customer: {
+    phoneNumber: string;
+    firstName: string;
+    lastName1?: string;
+    lastName2?: string;
+    billingCycle: string;
+    nextPaymentDate?: string | null;
+    paymentDay?: string | number | null;
+}) {
     try {
         const supabase = await createClient();
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         if (userError || !user) {
             console.error('[Suscripta] Manual Add Auth Error:', userError);
             return { ok: false, error: 'Acceso no autorizado: ' + (userError?.message || 'No se encontró sesión activa') };
+        }
+
+        if (!customer.phoneNumber || !customer.firstName || !customer.billingCycle) {
+            return { ok: false, error: 'Teléfono, Nombre(s) y Frecuencia de pago son obligatorios.' };
+        }
+
+        const paymentDay = parsePaymentDay(customer.paymentDay);
+        const validPaymentDay = paymentDay && paymentDay >= 1 && paymentDay <= 31
+            && (customer.billingCycle === 'weekly' || customer.billingCycle === 'biweekly' ? paymentDay <= 7 : true);
+        const nextPaymentDate = customer.nextPaymentDate || (validPaymentDay
+            ? getInitialNextPaymentDate({
+                paymentDay,
+                billingCycle: customer.billingCycle,
+            })
+            : null);
+        const anchorDay = validPaymentDay
+            ? paymentDay
+            : getAnchorDayFromPaymentDate(nextPaymentDate, customer.billingCycle);
+
+        if (!nextPaymentDate) {
+            return { ok: false, error: 'Agrega Fecha de próximo pago o Día de pago válido para automatizar recordatorios.' };
         }
 
         const { error } = await supabase
@@ -273,6 +392,8 @@ export async function addManualCustomer(customer: { phoneNumber: string, firstNa
                 last_name_1: customer.lastName1 || null,
                 last_name_2: customer.lastName2 || null,
                 billing_cycle: customer.billingCycle,
+                next_payment_date: nextPaymentDate,
+                anchor_day: anchorDay,
                 deleted_at: null,
                 is_active: true,
                 inactive_at: null

@@ -2,10 +2,12 @@
 
 import { useState, useCallback } from 'react';
 import { useDropzone } from 'react-dropzone';
+import Link from 'next/link';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { parsePhoneNumber, CountryCode } from 'libphonenumber-js';
 import { uploadCustomersBatch } from '@/app/actions/customers';
+import { getInitialNextPaymentDate, normalizeBillingCycle, parsePaymentDay } from '@/utils/customers/billing-cycles';
 
 // ====== ICÓNS SVGs (In-line para mantener integridad gráfica) ======
 const CloudUploadIcon = ({ className }: { className?: string }) => (
@@ -42,7 +44,7 @@ const TrashIcon = ({ className }: { className?: string }) => (
 // ====================================================================
 
 // --- TYPES ---
-type FlowStep = 'UPLOAD' | 'MAPPING' | 'REVIEW' | 'SUCCESS';
+type FlowStep = 'UPLOAD' | 'SHEET_SELECT' | 'MAPPING' | 'REVIEW' | 'SUCCESS';
 type HeaderMapping = {
   phone: string | null;
   firstName: string | null;
@@ -50,6 +52,7 @@ type HeaderMapping = {
   lastName2: string | null;
   billingCycle: string | null;
   nextPaymentDate: string | null;
+  paymentDay: string | null;
 };
 type SpreadsheetCell = string | number | boolean | Date | null | undefined;
 type SpreadsheetRow = Record<string, SpreadsheetCell>;
@@ -57,6 +60,10 @@ type MappingField = {
   key: keyof HeaderMapping;
   label: string;
   req: boolean;
+};
+type WorkbookSheetData = {
+  rows: SpreadsheetRow[];
+  headers: string[];
 };
 interface PreviewRow {
   _id: string; // Internal id
@@ -66,6 +73,9 @@ interface PreviewRow {
   lastName2: string;
   billingCycleRaw: string;
   nextPaymentDateRaw: string;
+  paymentDayRaw: string;
+  calculatedNextPaymentDate: string;
+  scheduleWarning: string;
 
   // Validation flags
   phoneE164: string;
@@ -91,9 +101,20 @@ const MAPPING_FIELDS: MappingField[] = [
   { key: 'lastName1', label: 'Apellido Paterno', req: false },
   { key: 'lastName2', label: 'Apellido Materno', req: false },
   { key: 'phone', label: 'Teléfono Móvil (Required)*', req: true },
-  { key: 'billingCycle', label: 'Ciclo (Mensual, Anual) Opcional', req: false },
-  { key: 'nextPaymentDate', label: 'Fecha de Próx. Pago Opcional', req: false }
+  { key: 'billingCycle', label: 'Frecuencia de pago *', req: true },
+  { key: 'nextPaymentDate', label: 'Fecha de próximo pago', req: false },
+  { key: 'paymentDay', label: 'Día de pago', req: false }
 ];
+
+const EMPTY_MAPPING: HeaderMapping = {
+  phone: null,
+  firstName: null,
+  lastName1: null,
+  lastName2: null,
+  billingCycle: null,
+  nextPaymentDate: null,
+  paymentDay: null
+};
 
 export default function ClientsUploadPage() {
   const [step, setStep] = useState<FlowStep>('UPLOAD');
@@ -108,16 +129,11 @@ export default function ClientsUploadPage() {
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [csvData, setCsvData] = useState<SpreadsheetRow[]>([]);
   const [fileName, setFileName] = useState('');
+  const [pendingWorkbook, setPendingWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [selectedSheetName, setSelectedSheetName] = useState('');
 
   // Mapping State
-  const [mapping, setMapping] = useState<HeaderMapping>({
-    phone: null,
-    firstName: null,
-    lastName1: null,
-    lastName2: null,
-    billingCycle: null,
-    nextPaymentDate: null
-  });
+  const [mapping, setMapping] = useState<HeaderMapping>(EMPTY_MAPPING);
 
   // Review State
   const [rows, setRows] = useState<PreviewRow[]>([]);
@@ -143,6 +159,89 @@ export default function ClientsUploadPage() {
     return c;
   };
 
+  const formatSpreadsheetDateValue = (value: SpreadsheetCell) => {
+    if (!value) return '';
+
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      const year = value.getFullYear();
+      const month = String(value.getMonth() + 1).padStart(2, '0');
+      const day = String(value.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    const raw = String(value).trim();
+    const isoMatch = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (isoMatch) {
+      return `${isoMatch[1]}-${isoMatch[2].padStart(2, '0')}-${isoMatch[3].padStart(2, '0')}`;
+    }
+
+    const dmyMatch = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2}|\d{4})$/);
+    if (dmyMatch) {
+      const year = dmyMatch[3].length === 2 ? `20${dmyMatch[3]}` : dmyMatch[3];
+      return `${year}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
+    }
+
+    return raw;
+  };
+
+  const resetImportFlow = () => {
+    setStep('UPLOAD');
+    setProcessing(false);
+    setFormatError(null);
+    setCsvHeaders([]);
+    setCsvData([]);
+    setFileName('');
+    setPendingWorkbook(null);
+    setSelectedSheetName('');
+    setMapping(EMPTY_MAPPING);
+    setRows([]);
+    setShowAutoFillWarning(false);
+  };
+
+  const getWorkbookSheetData = useCallback((workbook: XLSX.WorkBook, sheetName: string): WorkbookSheetData => {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) return { rows: [], headers: [] };
+
+    const rows = XLSX.utils.sheet_to_json<SpreadsheetRow>(worksheet, { defval: '' });
+    const headers = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+    return { rows, headers };
+  }, []);
+
+  const applySpreadsheetData = useCallback((data: SpreadsheetRow[], headers: string[]) => {
+    setCsvHeaders(headers);
+    setCsvData(data);
+
+    const autoMap = {
+      phone: headers.find(h => /tel|phone|cel|número|numero/i.test(h)) || null,
+      firstName: headers.find(h => /name|nombre/i.test(h) && !/last|apellido/i.test(h)) || null,
+      lastName1: headers.find(h => /last|apellido/i.test(h) && !/2/i.test(h)) || null,
+      lastName2: headers.find(h => /last|apellido.*2/i.test(h)) || null,
+      billingCycle: headers.find(h => /ciclo|frecuencia|periodo|billing/i.test(h)) || null,
+      nextPaymentDate: headers.find(h => /fecha|vencimiento|date|siguiente|proximo|próximo/i.test(h)) || null,
+      paymentDay: headers.find(h => /día.*pago|dia.*pago|día.*cobro|dia.*cobro|day.*pay|payment.*day/i.test(h)) || null,
+    };
+
+    setMapping(autoMap);
+    setPendingWorkbook(null);
+    setSelectedSheetName('');
+    setStep('MAPPING');
+    setProcessing(false);
+  }, []);
+
+  const handleSheetSelection = () => {
+    if (!pendingWorkbook || !selectedSheetName) return;
+
+    const { rows: sheetRows, headers } = getWorkbookSheetData(pendingWorkbook, selectedSheetName);
+    if (sheetRows.length === 0) {
+      setFormatError('La hoja seleccionada está vacía o no contiene registros válidos.');
+      return;
+    }
+
+    setFormatError(null);
+    applySpreadsheetData(sheetRows, headers);
+  };
+
   // ====== PASO 1: UPLOAD (Drag & Drop) ======
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
@@ -150,24 +249,12 @@ export default function ClientsUploadPage() {
 
     setFileName(file.name);
     setProcessing(true);
-
-    const performAutoMapping = (data: SpreadsheetRow[], headers: string[]) => {
-      setCsvHeaders(headers);
-      setCsvData(data);
-
-      const autoMap = {
-        phone: headers.find(h => /tel|phone|cel|número|numero/i.test(h)) || null,
-        firstName: headers.find(h => /name|nombre/i.test(h) && !/last|apellido/i.test(h)) || null,
-        lastName1: headers.find(h => /last|apellido/i.test(h) && !/2/i.test(h)) || null,
-        lastName2: headers.find(h => /last|apellido.*2/i.test(h)) || null,
-        billingCycle: headers.find(h => /ciclo|frecuencia|periodo|billing/i.test(h)) || null,
-        nextPaymentDate: headers.find(h => /fecha|pago|vencimiento|date|siguiente/i.test(h)) || null,
-      };
-
-      setMapping(autoMap);
-      setStep('MAPPING');
-      setProcessing(false);
-    };
+    setFormatError(null);
+    setCsvHeaders([]);
+    setCsvData([]);
+    setRows([]);
+    setPendingWorkbook(null);
+    setSelectedSheetName('');
 
     const isExcel = file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
 
@@ -177,13 +264,19 @@ export default function ClientsUploadPage() {
         try {
           const data = new Uint8Array(e.target?.result as ArrayBuffer);
           const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+          const sheetNames = workbook.SheetNames;
 
-          if (json.length > 0) {
-            const headers = Object.keys(json[0] as object);
-            performAutoMapping(json as SpreadsheetRow[], headers);
+          if (sheetNames.length > 1) {
+            setPendingWorkbook(workbook);
+            setSelectedSheetName(sheetNames[0]);
+            setStep('SHEET_SELECT');
+            setProcessing(false);
+            return;
+          }
+
+          const { rows: sheetRows, headers } = getWorkbookSheetData(workbook, sheetNames[0]);
+          if (sheetRows.length > 0) {
+            applySpreadsheetData(sheetRows, headers);
           } else {
             alert("El archivo Excel está vacío o no contiene registros válidos.");
             setProcessing(false);
@@ -202,7 +295,7 @@ export default function ClientsUploadPage() {
         skipEmptyLines: true,
         complete: (results) => {
           const headers = results.meta.fields || [];
-          performAutoMapping(results.data as SpreadsheetRow[], headers);
+          applySpreadsheetData(results.data as SpreadsheetRow[], headers);
         },
         error: (err) => {
           console.error("CSV Parse Error:", err);
@@ -211,7 +304,7 @@ export default function ClientsUploadPage() {
         }
       });
     }
-  }, []);
+  }, [applySpreadsheetData, getWorkbookSheetData]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -226,8 +319,13 @@ export default function ClientsUploadPage() {
   // ====== PASO 2: MAPPING (Emparejar Columnas) ======
   const handleProceedToReview = () => {
     setFormatError(null);
-    if (!mapping.phone || !mapping.firstName) {
-      setFormatError('El "Teléfono" y "Nombre (First Name)" son campos obligatorios de mapear.');
+    if (!mapping.phone || !mapping.firstName || !mapping.billingCycle) {
+      setFormatError('El "Teléfono", "Nombre" y "Frecuencia de pago" son campos obligatorios de mapear.');
+      return;
+    }
+
+    if (!mapping.nextPaymentDate && !mapping.paymentDay) {
+      setFormatError('Mapea "Fecha de próximo pago" o "Día de pago". Al menos uno es obligatorio para automatizar recordatorios.');
       return;
     }
 
@@ -246,6 +344,13 @@ export default function ClientsUploadPage() {
         // Ignoramos si es instancía de fecha, pero si es texto con muchas letras (excluyendo meses) error.
         if (!(dateVal instanceof Date) && /[a-zA-Z]{4,}/.test(String(dateVal)) && !/ene|feb|mar|abr|may|jun|jul|ago|sep|oct|nov|dic/i.test(String(dateVal))) {
           localFormatError = `La columna de Próx. Pago contiene texto ("${dateVal}"). Usa formatos de Fecha como YYYY-MM-DD o DD/MM/YYYY.`;
+          break;
+        }
+      }
+      if (mapping.paymentDay && row[mapping.paymentDay]) {
+        const paymentDay = parsePaymentDay(String(row[mapping.paymentDay]));
+        if (!paymentDay || paymentDay < 1 || paymentDay > 31) {
+          localFormatError = `La columna de Día de pago contiene un valor inválido ("${row[mapping.paymentDay]}"). Usa un número entre 1 y 31.`;
           break;
         }
       }
@@ -286,15 +391,41 @@ export default function ClientsUploadPage() {
         // Formatting err, valid=false
       }
 
+      const billingCycleRaw = mapping.billingCycle ? String(row[mapping.billingCycle] || '') : '';
+      const nextPaymentDateRaw = mapping.nextPaymentDate ? formatSpreadsheetDateValue(row[mapping.nextPaymentDate]) : '';
+      const paymentDayRaw = mapping.paymentDay ? String(row[mapping.paymentDay] || '') : '';
+      const paymentDay = parsePaymentDay(paymentDayRaw);
+      const normalizedCycle = normalizeBillingCycle(billingCycleRaw);
+      const calculatedNextPaymentDate = !nextPaymentDateRaw && paymentDay
+        ? getInitialNextPaymentDate({ paymentDay, billingCycle: normalizedCycle }) ?? ''
+        : '';
+      const scheduleWarning = (() => {
+        if (nextPaymentDateRaw && paymentDay) {
+          const dateDay = new Date(nextPaymentDateRaw + 'T12:00:00').getDate();
+          if (!Number.isNaN(dateDay) && dateDay !== paymentDay) {
+            return `La fecha usa día ${dateDay}, pero el día de pago indica ${paymentDay}. Se usará la fecha como próximo cobro y ${paymentDay} como ancla futura.`;
+          }
+        }
+        if (!nextPaymentDateRaw && paymentDay && !calculatedNextPaymentDate) {
+          return normalizedCycle === 'weekly' || normalizedCycle === 'biweekly'
+            ? 'Para frecuencia semanal o quincenal, el día de pago debe ser 1-7 (lunes-domingo) si no hay fecha completa.'
+            : 'No se pudo calcular la fecha inicial con el día de pago indicado.';
+        }
+        return '';
+      })();
+
       return {
         _id: `row-${index}`,
         phoneRaw: phoneRawStr,
         firstName: String(row[mapping.firstName!] || ''),
         lastName1: mapping.lastName1 ? String(row[mapping.lastName1] || '') : '',
         lastName2: mapping.lastName2 ? String(row[mapping.lastName2] || '') : '',
-        billingCycleRaw: mapping.billingCycle ? String(row[mapping.billingCycle] || '') : '',
-        nextPaymentDateRaw: mapping.nextPaymentDate ? String(row[mapping.nextPaymentDate] || '') : '',
-        isValid: valid,
+        billingCycleRaw,
+        nextPaymentDateRaw,
+        paymentDayRaw,
+        calculatedNextPaymentDate,
+        scheduleWarning,
+        isValid: valid && Boolean(billingCycleRaw) && Boolean(nextPaymentDateRaw || calculatedNextPaymentDate),
         phoneE164: formattedPhoneE164,
         phoneIntl: formattedPhoneIntl,
         edited: false,
@@ -380,6 +511,9 @@ export default function ClientsUploadPage() {
 
   const validCount = rows.filter(r => r.isValid).length;
   const errorCount = rows.length - validCount;
+  const stepItems = step === 'SHEET_SELECT'
+    ? ['UPLOAD', 'SHEET_SELECT', 'MAPPING', 'REVIEW', 'SUCCESS']
+    : ['UPLOAD', 'MAPPING', 'REVIEW', 'SUCCESS'];
 
   // ====== PASO 4: IMPORTACIÓN ======
   const handleImport = async () => {
@@ -389,7 +523,8 @@ export default function ClientsUploadPage() {
       lastName1: r.lastName1,
       lastName2: r.lastName2,
       billingCycle: r.billingCycleRaw ? r.billingCycleRaw.trim() : null,
-      nextPaymentDate: r.nextPaymentDateRaw && r.nextPaymentDateRaw.trim() !== '' ? r.nextPaymentDateRaw.trim() : null
+      nextPaymentDate: r.nextPaymentDateRaw && r.nextPaymentDateRaw.trim() !== '' ? r.nextPaymentDateRaw.trim() : null,
+      paymentDay: r.paymentDayRaw && r.paymentDayRaw.trim() !== '' ? r.paymentDayRaw.trim() : null
     }));
 
     if (payloadToImport.length === 0) return;
@@ -420,10 +555,10 @@ export default function ClientsUploadPage() {
 
       {/* Stepper Visual */}
       <div className="flex items-center gap-4 mb-10 overflow-x-auto pb-4">
-        {['UPLOAD', 'MAPPING', 'REVIEW', 'SUCCESS'].map((s, index) => {
+        {stepItems.map((s, index) => {
           const stepNum = index + 1;
           const isActive = step === s;
-          const isPast = ['UPLOAD', 'MAPPING', 'REVIEW', 'SUCCESS'].indexOf(step) > index;
+          const isPast = stepItems.indexOf(step) > index;
 
           return (
             <div key={s} className="flex items-center gap-3">
@@ -431,9 +566,9 @@ export default function ClientsUploadPage() {
                 {isPast ? <CheckIcon className="w-4 h-4" /> : stepNum}
               </div>
               <span className={`text-sm font-medium ${isActive ? 'text-white' : isPast ? 'text-zinc-300' : 'text-zinc-600'}`}>
-                {s === 'UPLOAD' ? 'Archivo' : s === 'MAPPING' ? 'Columnas' : s === 'REVIEW' ? 'Validación' : 'Éxito'}
+                {s === 'UPLOAD' ? 'Archivo' : s === 'SHEET_SELECT' ? 'Hoja' : s === 'MAPPING' ? 'Columnas' : s === 'REVIEW' ? 'Validación' : 'Éxito'}
               </span>
-              {index < 3 && <ArrowRightIcon className="w-4 h-4 text-zinc-700 mx-2" />}
+              {index < stepItems.length - 1 && <ArrowRightIcon className="w-4 h-4 text-zinc-700 mx-2" />}
             </div>
           )
         })}
@@ -487,6 +622,79 @@ export default function ClientsUploadPage() {
           </div>
         )}
 
+        {/* 1.5. SHEET SELECT */}
+        {step === 'SHEET_SELECT' && pendingWorkbook && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/10">
+              <div>
+                <h3 className="text-lg font-medium text-white flex items-center gap-3">
+                  <FileTextIcon className="w-5 h-5 text-emerald-400" />
+                  {fileName}
+                </h3>
+                <p className="text-sm text-zinc-400 mt-1">El archivo tiene varias hojas. Elige cuál quieres importar.</p>
+              </div>
+              <div className="text-right">
+                <span className="text-2xl font-semibold text-white">{pendingWorkbook.SheetNames.length}</span>
+                <p className="text-xs text-zinc-500 uppercase tracking-widest">Hojas</p>
+              </div>
+            </div>
+
+            {formatError && (
+              <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-xl mb-6 flex items-start gap-4">
+                <div className="mt-0.5 w-6 h-6 flex items-center justify-center text-red-500 bg-red-500/20 rounded-full">!</div>
+                <div>
+                  <h4 className="text-red-400 font-semibold text-sm mb-1">Hoja sin registros</h4>
+                  <p className="text-xs text-red-300/80 leading-relaxed">{formatError}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-3">
+              {pendingWorkbook.SheetNames.map((sheetName) => {
+                const { rows: sheetRows } = getWorkbookSheetData(pendingWorkbook, sheetName);
+                const selected = selectedSheetName === sheetName;
+
+                return (
+                  <button
+                    key={sheetName}
+                    type="button"
+                    onClick={() => {
+                      setSelectedSheetName(sheetName);
+                      setFormatError(null);
+                    }}
+                    className={`flex items-center justify-between rounded-2xl border px-5 py-4 text-left transition-colors ${
+                      selected
+                        ? 'border-emerald-500 bg-emerald-500/10 text-white'
+                        : 'border-white/10 bg-black/20 text-zinc-300 hover:border-white/20 hover:bg-white/5'
+                    }`}
+                  >
+                    <span className="min-w-0 truncate text-sm font-medium">{sheetName}</span>
+                    <span className="ml-4 shrink-0 text-xs text-zinc-500">{sheetRows.length} registros</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="mt-12 flex justify-end gap-4">
+              <button
+                onClick={resetImportFlow}
+                disabled={processing}
+                className="px-8 py-3 rounded-full text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSheetSelection}
+                disabled={processing || !selectedSheetName}
+                className="bg-emerald-500 text-black px-8 py-3 rounded-full font-medium hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                Continuar
+                <ArrowRightIcon className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 2. MAPPING */}
         {step === 'MAPPING' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -526,16 +734,15 @@ export default function ClientsUploadPage() {
               </div>
             )}
 
-            {(!mapping.billingCycle || !mapping.nextPaymentDate) && (
+            {(!mapping.billingCycle || (!mapping.nextPaymentDate && !mapping.paymentDay)) && (
               <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl mb-8 flex items-start gap-4 shadow-[0_4px_20px_rgba(59,130,246,0.1)]">
                 <div className="mt-0.5 w-6 h-6 flex items-center justify-center text-blue-400 bg-blue-500/20 rounded-full shrink-0">i</div>
                 <div>
                    <h4 className="text-blue-400 font-semibold text-sm mb-1">Configuración de Recordatorios</h4>
-                   <p className="text-xs text-blue-300/80 leading-relaxed">
-                     Parece que no has mapeado el <strong>Ciclo de Cobro</strong> o la <strong>Fecha de Pago</strong>. 
-                     Estos campos son fundamentales para que el sistema pueda programar y enviar recordatorios automáticos de pago a tus clientes. 
-                     Si los dejas vacíos, tendrás que configurarlos manualmente después.
-                   </p>
+                  <p className="text-xs text-blue-300/80 leading-relaxed">
+                    La <strong>Frecuencia de pago</strong> es obligatoria, y debes mapear <strong>Fecha de próximo pago</strong> o <strong>Día de pago</strong>.
+                    Con esos datos Suscripta calcula los ciclos y automatiza los recordatorios sin trabajo mensual.
+                  </p>
                 </div>
               </div>
             )}
@@ -560,7 +767,14 @@ export default function ClientsUploadPage() {
               ))}
             </div>
 
-            <div className="mt-12 flex justify-end">
+            <div className="mt-12 flex justify-end gap-4">
+              <button
+                onClick={resetImportFlow}
+                disabled={processing}
+                className="px-8 py-3 rounded-full text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
               <button
                 onClick={handleProceedToReview}
                 disabled={processing}
@@ -648,18 +862,21 @@ export default function ClientsUploadPage() {
                   <tr>
                     <th className="px-6 py-4 font-medium">Estado</th>
                     <th className="px-6 py-4 font-medium">Nombre Completo</th>
-                      <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.02]">
-                        Teléfono Crudo (CSV)
-                      </th>
-                      <th className="px-6 py-4 font-medium border-l border-white/5">
-                        E.164 (Sistema Meta)
-                      </th>
-                      <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
-                        CICLO (FRECUENCIA)
-                      </th>
-                      <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
-                        FECHA DE PAGO
-                      </th>
+                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.02]">
+                      Teléfono Crudo (CSV)
+                    </th>
+                    <th className="px-6 py-4 font-medium border-l border-white/5">
+                      E.164 (Sistema Meta)
+                    </th>
+                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
+                      CICLO (FRECUENCIA)
+                    </th>
+                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
+                      FECHA DE PAGO
+                    </th>
+                    <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
+                      DÍA / ANCLA
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -710,8 +927,17 @@ export default function ClientsUploadPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 border-l border-white/5 text-sm text-zinc-300 font-medium">
-                        {row.nextPaymentDateRaw || (
+                        {row.nextPaymentDateRaw || row.calculatedNextPaymentDate || (
                           <span className="text-zinc-600 italic">No detectado</span>
+                        )}
+                        {row.calculatedNextPaymentDate && (
+                          <p className="mt-1 text-[10px] uppercase tracking-widest text-emerald-400">Calculada</p>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 border-l border-white/5 text-sm text-zinc-300 font-medium">
+                        {row.paymentDayRaw || <span className="text-zinc-600 italic">No detectado</span>}
+                        {row.scheduleWarning && (
+                          <p className="mt-1 max-w-xs whitespace-normal text-xs leading-5 text-yellow-400">{row.scheduleWarning}</p>
                         )}
                       </td>
                     </tr>
@@ -723,19 +949,7 @@ export default function ClientsUploadPage() {
             {/* Submit Button */}
             <div className="mt-8 flex justify-end gap-4">
               <button
-                onClick={() => {
-                  setStep('UPLOAD');
-                  setRows([]);
-                  setCsvData([]);
-                  setMapping({
-                    phone: null,
-                    firstName: null,
-                    lastName1: null,
-                    lastName2: null,
-                    billingCycle: null,
-                    nextPaymentDate: null
-                  });
-                }}
+                onClick={resetImportFlow}
                 disabled={processing}
                 className="px-8 py-3 rounded-full text-sm font-medium text-zinc-400 hover:text-white hover:bg-white/5 transition-colors disabled:opacity-50"
               >
@@ -766,24 +980,20 @@ export default function ClientsUploadPage() {
             <p className="text-zinc-400 mb-8 max-w-md">
               Se insertaron <strong>{importStats.success}</strong> clientes válidamente formateados en tu cuenta listos para mensajería.
             </p>
-            <button
-              onClick={() => {
-                setStep('UPLOAD');
-                setRows([]);
-                setCsvData([]);
-                setMapping({
-                  phone: null,
-                  firstName: null,
-                  lastName1: null,
-                  lastName2: null,
-                  billingCycle: null,
-                  nextPaymentDate: null
-                });
-              }}
-              className="bg-white/10 text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-white/20 transition-colors"
-            >
-              Subir otro archivo
-            </button>
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-center gap-3">
+              <button
+                onClick={resetImportFlow}
+                className="bg-white/10 text-white px-6 py-2.5 rounded-full text-sm font-medium hover:bg-white/20 transition-colors"
+              >
+                Subir otro archivo
+              </button>
+              <Link
+                href="/dashboard/contacts"
+                className="bg-emerald-500 text-black px-6 py-2.5 rounded-full text-sm font-medium hover:bg-emerald-400 transition-colors"
+              >
+                Finalizar
+              </Link>
+            </div>
           </div>
         )}
       </div>

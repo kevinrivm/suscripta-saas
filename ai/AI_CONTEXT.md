@@ -19,7 +19,7 @@ The application relies heavily on **Server Actions** for database operations and
 - `whatsapp_message_events`: Log aggregation for Meta's webhooks. Fully multi-tenant mapped securely via `user_id`.
 - `customers`:
   - **Core Schema**: `id` (UUID), `user_id`, `phone_number` (E.164 format), `first_name`, `last_name_1`, `last_name_2`.
-  - **Business Schema**: `payment_status` (`'pending'`, `'paid'`, `'overdue'`, `'cancelled'`), `billing_cycle`, `next_payment_date`, `anchor_day` (SMALLINT 1-31).
+  - **Business Schema**: `payment_status` (`'pending'`, `'paid'`, `'cancelled'`), `billing_cycle`, `next_payment_date`, `anchor_day` (SMALLINT 1-31). `next_payment_date` is the source of truth for the next real charge date. `overdue` is derived from pending + expired `next_payment_date`, not an editable stored status.
   - **Lifecycle Schema (Soft Deletes)**: `is_active` (boolean), `inactive_at` (timestamp), `deleted_at` (timestamp).
   - Conflicts handled with `UNIQUE(user_id, phone_number)`.
 
@@ -38,7 +38,7 @@ The application relies heavily on **Server Actions** for database operations and
   - Real-time E.164 visual parsing breaking down standard formats cleanly (e.g. `(+52) 551...`).
 
 ## 4. Core Business Rules & Constraints
-- **WhatsApp Sending Criteria (CRITICAL):** The engine fetching automated reminders **MUST ONLY FETCH** customers whose `payment_status` is explicitly (`'pending'` or `'overdue'`) **AND** evaluate `is_active = true` AND `deleted_at IS NULL`.
+- **WhatsApp Sending Criteria (CRITICAL):** The engine fetching automated reminders **MUST ONLY FETCH** customers whose `payment_status` is explicitly `'pending'` **AND** evaluate `is_active = true` AND `deleted_at IS NULL`. Overdue handling must be derived from `next_payment_date < today` and used only to choose copy/template urgency. A protected automation endpoint advances `next_payment_date` to the next cycle so users do not manually reset every customer each period.
 - **Billing Cycles Handling:** Cycles coming from imports MUST pass through `CYCLE_NORMALIZE` matching either canonical English (`'monthly'`) or localized Spanish variations (`'mensual'`). Unrecognized values are explicitly driven to blank (`''`) demanding user intervention instead of defaulting to wrong periodicities.
 - **Resurrection Logic:** Bulk imports natively restore/resurrect an archived Soft-Deleted client (`deleted_at = null`) if an exact matched E.164 hits standard upsert.
 - **Language / Interaction Profile:** Always respond to the end-user natively in **advanced technological Spanish**.
