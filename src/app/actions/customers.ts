@@ -2,6 +2,14 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { getAnchorDayFromPaymentDate, getInitialNextPaymentDate, parsePaymentDay } from '@/utils/customers/billing-cycles';
+import {
+    customFieldDefinitionsEqual,
+    normalizeCustomFieldDefinitions,
+    sanitizeCustomFieldValues,
+    type CustomFieldDefinition,
+    type CustomFieldKey,
+    type CustomFieldValues,
+} from '@/utils/customers/custom-fields';
 
 /*
     ================================================================================
@@ -27,6 +35,7 @@ interface CustomerInsertInput {
     billingCycle?: string | null;
     nextPaymentDate?: string | null;
     paymentDay?: string | number | null;
+    customFields?: CustomFieldValues | null;
 }
 
 type CustomerPaymentStatus = 'pending' | 'paid' | 'cancelled';
@@ -43,6 +52,7 @@ interface CustomerUpsertPayload {
     billing_cycle?: string;
     next_payment_date?: string;
     anchor_day?: number;
+    custom_fields?: CustomFieldValues;
 }
 
 interface CustomerCycleUpdatePayload {
@@ -55,7 +65,52 @@ interface CustomerReschedulePayload {
     anchor_day?: number;
 }
 
-export async function uploadCustomersBatch(customers: CustomerInsertInput[], mode: 'append' | 'overwrite' = 'append') {
+async function getCustomFieldDefinitionsForUser(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+    const { data, error } = await supabase
+        .from('customer_custom_field_configs')
+        .select('fields')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+    if (error) throw error;
+    return normalizeCustomFieldDefinitions(data?.fields ?? []);
+}
+
+async function upsertCustomFieldConfig(
+    supabase: Awaited<ReturnType<typeof createClient>>,
+    userId: string,
+    definitions: CustomFieldDefinition[],
+) {
+    const { error } = await supabase
+        .from('customer_custom_field_configs')
+        .upsert({
+            user_id: userId,
+            fields: definitions,
+            locked_at: definitions.length > 0 ? new Date().toISOString() : null,
+        }, { onConflict: 'user_id' });
+
+    if (error) throw error;
+}
+
+export async function getCustomerCustomFieldConfig() {
+    try {
+        const supabase = await createClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) return { ok: false, error: 'Acceso no autorizado.', fields: [] as CustomFieldDefinition[] };
+
+        const fields = await getCustomFieldDefinitionsForUser(supabase, user.id);
+        return { ok: true, fields };
+    } catch (error) {
+        console.error('[Suscripta] Error leyendo configuración de campos personalizados:', error);
+        return { ok: false, error: 'No se pudo leer la configuración de campos personalizados.', fields: [] as CustomFieldDefinition[] };
+    }
+}
+
+export async function uploadCustomersBatch(
+    customers: CustomerInsertInput[],
+    mode: 'append' | 'overwrite' = 'append',
+    customFieldDefinitions: CustomFieldDefinition[] = [],
+) {
     try {
         const supabase = await createClient();
         const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -67,6 +122,29 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
 
         if (!customers || customers.length === 0) {
             return { ok: false, error: 'No hay clientes válidos para importar.' };
+        }
+
+        const existingCustomFieldDefinitions = await getCustomFieldDefinitionsForUser(supabase, user.id);
+        const incomingCustomFieldDefinitions = normalizeCustomFieldDefinitions(customFieldDefinitions);
+        let activeCustomFieldDefinitions = existingCustomFieldDefinitions;
+
+        if (mode === 'overwrite') {
+            activeCustomFieldDefinitions = incomingCustomFieldDefinitions;
+            await upsertCustomFieldConfig(supabase, user.id, activeCustomFieldDefinitions);
+        } else if (existingCustomFieldDefinitions.length > 0) {
+            if (
+                incomingCustomFieldDefinitions.length > 0
+                && !customFieldDefinitionsEqual(existingCustomFieldDefinitions, incomingCustomFieldDefinitions)
+            ) {
+                return {
+                    ok: false,
+                    error: 'Tu estructura de campos personalizados ya está bloqueada. Usa Sobrescribir Completo para reemplazarla.',
+                };
+            }
+            activeCustomFieldDefinitions = existingCustomFieldDefinitions;
+        } else if (incomingCustomFieldDefinitions.length > 0) {
+            activeCustomFieldDefinitions = incomingCustomFieldDefinitions;
+            await upsertCustomFieldConfig(supabase, user.id, activeCustomFieldDefinitions);
         }
 
         // Formatear payload para la base de datos
@@ -112,6 +190,7 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
                 ? paymentDay
                 : getAnchorDayFromPaymentDate(row.next_payment_date, row.billing_cycle);
             if (anchorDay) row.anchor_day = anchorDay;
+            row.custom_fields = sanitizeCustomFieldValues(c.customFields, activeCustomFieldDefinitions);
             return row;
         });
 
@@ -119,7 +198,7 @@ export async function uploadCustomersBatch(customers: CustomerInsertInput[], mod
         if (mode === 'overwrite') {
             const { error: deleteError } = await supabase
                 .from('customers')
-                .update({ deleted_at: new Date().toISOString(), is_active: false })
+                .update({ deleted_at: new Date().toISOString(), is_active: false, custom_fields: {} })
                 .eq('user_id', user.id)
                 .is('deleted_at', null);
 
@@ -353,6 +432,7 @@ export async function addManualCustomer(customer: {
     billingCycle: string;
     nextPaymentDate?: string | null;
     paymentDay?: string | number | null;
+    customFields?: CustomFieldValues | null;
 }) {
     try {
         const supabase = await createClient();
@@ -383,6 +463,9 @@ export async function addManualCustomer(customer: {
             return { ok: false, error: 'Agrega Fecha de próximo pago o Día de pago válido para automatizar recordatorios.' };
         }
 
+        const customFieldDefinitions = await getCustomFieldDefinitionsForUser(supabase, user.id);
+        const customFields = sanitizeCustomFieldValues(customer.customFields, customFieldDefinitions);
+
         const { error } = await supabase
             .from('customers')
             .upsert({
@@ -394,6 +477,7 @@ export async function addManualCustomer(customer: {
                 billing_cycle: customer.billingCycle,
                 next_payment_date: nextPaymentDate,
                 anchor_day: anchorDay,
+                custom_fields: customFields,
                 deleted_at: null,
                 is_active: true,
                 inactive_at: null
@@ -403,5 +487,54 @@ export async function addManualCustomer(customer: {
         return { ok: true };
     } catch {
         return { ok: false, error: 'Error añadiendo cliente.' };
+    }
+}
+
+export async function updateCustomerCustomField(
+    customerId: string,
+    key: CustomFieldKey,
+    value: string,
+) {
+    try {
+        const supabase = await createClient();
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+            return { ok: false, error: 'Acceso no autorizado.' };
+        }
+
+        const definitions = await getCustomFieldDefinitionsForUser(supabase, user.id);
+        const definition = definitions.find((field) => field.key === key);
+        if (!definition) {
+            return { ok: false, error: 'Ese campo personalizado no está configurado para esta cuenta.' };
+        }
+
+        const { data: customer, error: readError } = await supabase
+            .from('customers')
+            .select('custom_fields')
+            .eq('id', customerId)
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        if (readError) return { ok: false, error: readError.message };
+        if (!customer) return { ok: false, error: 'Cliente no encontrado.' };
+
+        const currentValues = sanitizeCustomFieldValues(customer.custom_fields, definitions);
+        const sanitizedSingleValue = sanitizeCustomFieldValues({ [key]: value }, definitions)[key];
+        const nextValues = { ...currentValues };
+
+        if (sanitizedSingleValue) nextValues[key] = sanitizedSingleValue;
+        else delete nextValues[key];
+
+        const { error } = await supabase
+            .from('customers')
+            .update({ custom_fields: nextValues })
+            .eq('id', customerId)
+            .eq('user_id', user.id);
+
+        if (error) return { ok: false, error: error.message };
+        return { ok: true };
+    } catch (error) {
+        console.error('[Suscripta] Error actualizando campo personalizado:', error);
+        return { ok: false, error: 'Error al actualizar campo personalizado.' };
     }
 }

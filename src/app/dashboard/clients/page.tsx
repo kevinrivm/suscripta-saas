@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import Link from 'next/link';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { parsePhoneNumber, CountryCode } from 'libphonenumber-js';
-import { uploadCustomersBatch } from '@/app/actions/customers';
+import { getCustomerCustomFieldConfig, uploadCustomersBatch } from '@/app/actions/customers';
 import { getInitialNextPaymentDate, normalizeBillingCycle, parsePaymentDay } from '@/utils/customers/billing-cycles';
+import {
+  CUSTOM_FIELD_KEYS,
+  buildCustomFieldDefinitions,
+  normalizeCustomFieldDefinitions,
+  type CustomFieldDefinition,
+  type CustomFieldKey,
+  type CustomFieldValues,
+} from '@/utils/customers/custom-fields';
 
 // ====== ICÓNS SVGs (In-line para mantener integridad gráfica) ======
 const CloudUploadIcon = ({ className }: { className?: string }) => (
@@ -54,6 +62,11 @@ type HeaderMapping = {
   nextPaymentDate: string | null;
   paymentDay: string | null;
 };
+type CustomFieldDraft = {
+  key: CustomFieldKey;
+  label: string;
+  column: string | null;
+};
 type SpreadsheetCell = string | number | boolean | Date | null | undefined;
 type SpreadsheetRow = Record<string, SpreadsheetCell>;
 type MappingField = {
@@ -76,6 +89,7 @@ interface PreviewRow {
   paymentDayRaw: string;
   calculatedNextPaymentDate: string;
   scheduleWarning: string;
+  customFields: CustomFieldValues;
 
   // Validation flags
   phoneE164: string;
@@ -116,6 +130,12 @@ const EMPTY_MAPPING: HeaderMapping = {
   paymentDay: null
 };
 
+const EMPTY_CUSTOM_FIELD_DRAFTS: CustomFieldDraft[] = CUSTOM_FIELD_KEYS.map((key) => ({
+  key,
+  label: '',
+  column: null,
+}));
+
 export default function ClientsUploadPage() {
   const [step, setStep] = useState<FlowStep>('UPLOAD');
   const [processing, setProcessing] = useState(false);
@@ -134,12 +154,34 @@ export default function ClientsUploadPage() {
 
   // Mapping State
   const [mapping, setMapping] = useState<HeaderMapping>(EMPTY_MAPPING);
+  const [existingCustomFieldDefinitions, setExistingCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([]);
+  const [customFieldDrafts, setCustomFieldDrafts] = useState<CustomFieldDraft[]>(EMPTY_CUSTOM_FIELD_DRAFTS);
+  const [pendingCustomFieldDefinitions, setPendingCustomFieldDefinitions] = useState<CustomFieldDefinition[]>([]);
 
   // Review State
   const [rows, setRows] = useState<PreviewRow[]>([]);
   const [defaultCountry, setDefaultCountry] = useState<CountryCode>('MX');
   const [importStats, setImportStats] = useState({ success: 0, failed: 0 });
   const [showAutoFillWarning, setShowAutoFillWarning] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    getCustomerCustomFieldConfig().then((result) => {
+      if (!mounted || !result.ok) return;
+      const definitions = normalizeCustomFieldDefinitions(result.fields);
+      setExistingCustomFieldDefinitions(definitions);
+      setCustomFieldDrafts(CUSTOM_FIELD_KEYS.map((key, index) => ({
+        key,
+        label: definitions[index]?.label ?? '',
+        column: null,
+      })));
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // Funciones de limpieza de números
   const cleanPhoneNumber = (raw: string) => {
@@ -194,6 +236,12 @@ export default function ClientsUploadPage() {
     setPendingWorkbook(null);
     setSelectedSheetName('');
     setMapping(EMPTY_MAPPING);
+    setCustomFieldDrafts(CUSTOM_FIELD_KEYS.map((key, index) => ({
+      key,
+      label: existingCustomFieldDefinitions[index]?.label ?? '',
+      column: null,
+    })));
+    setPendingCustomFieldDefinitions([]);
     setRows([]);
     setShowAutoFillWarning(false);
   };
@@ -228,6 +276,30 @@ export default function ClientsUploadPage() {
     setStep('MAPPING');
     setProcessing(false);
   }, []);
+
+  const updateCustomFieldDraft = (key: CustomFieldKey, patch: Partial<CustomFieldDraft>) => {
+    setCustomFieldDrafts((current) => current.map((draft) => (
+      draft.key === key ? { ...draft, ...patch } : draft
+    )));
+  };
+
+  const getCustomFieldDefinitionsForImport = () => {
+    if (existingCustomFieldDefinitions.length > 0 && importMode === 'append') {
+      return existingCustomFieldDefinitions;
+    }
+
+    return buildCustomFieldDefinitions(customFieldDrafts.map((draft) => {
+      if (!draft.column) return '';
+      return draft.label || draft.column;
+    }));
+  };
+
+  const getCustomFieldMappingForImport = (definitions: CustomFieldDefinition[]) => {
+    return definitions.reduce<Record<CustomFieldKey, string | null>>((acc, definition, index) => {
+      acc[definition.key] = customFieldDrafts[index]?.column ?? null;
+      return acc;
+    }, {} as Record<CustomFieldKey, string | null>);
+  };
 
   const handleSheetSelection = () => {
     if (!pendingWorkbook || !selectedSheetName) return;
@@ -329,6 +401,14 @@ export default function ClientsUploadPage() {
       return;
     }
 
+    const customFieldDefinitionsForImport = getCustomFieldDefinitionsForImport();
+    const customFieldMappingForImport = getCustomFieldMappingForImport(customFieldDefinitionsForImport);
+    const mappedCustomColumns = Object.values(customFieldMappingForImport).filter(Boolean);
+    if (new Set(mappedCustomColumns).size !== mappedCustomColumns.length) {
+      setFormatError('No puedes mapear la misma columna a dos campos personalizados.');
+      return;
+    }
+
     setProcessing(true);
 
     // Pre-validación de formatos incompatibles
@@ -413,6 +493,13 @@ export default function ClientsUploadPage() {
         }
         return '';
       })();
+      const customFields = customFieldDefinitionsForImport.reduce<CustomFieldValues>((acc, definition) => {
+        const column = customFieldMappingForImport[definition.key];
+        if (!column) return acc;
+        const value = String(row[column] ?? '').trim();
+        if (value) acc[definition.key] = value;
+        return acc;
+      }, {});
 
       return {
         _id: `row-${index}`,
@@ -425,6 +512,7 @@ export default function ClientsUploadPage() {
         paymentDayRaw,
         calculatedNextPaymentDate,
         scheduleWarning,
+        customFields,
         isValid: valid && Boolean(billingCycleRaw) && Boolean(nextPaymentDateRaw || calculatedNextPaymentDate),
         phoneE164: formattedPhoneE164,
         phoneIntl: formattedPhoneIntl,
@@ -439,6 +527,7 @@ export default function ClientsUploadPage() {
     const validContentRows = processedRows.filter(r => r.phoneRaw.trim() !== '' || r.firstName.trim() !== '');
 
     setRows(validContentRows);
+    setPendingCustomFieldDefinitions(customFieldDefinitionsForImport);
     setStep('REVIEW');
     setProcessing(false);
   };
@@ -524,16 +613,18 @@ export default function ClientsUploadPage() {
       lastName2: r.lastName2,
       billingCycle: r.billingCycleRaw ? r.billingCycleRaw.trim() : null,
       nextPaymentDate: r.nextPaymentDateRaw && r.nextPaymentDateRaw.trim() !== '' ? r.nextPaymentDateRaw.trim() : null,
-      paymentDay: r.paymentDayRaw && r.paymentDayRaw.trim() !== '' ? r.paymentDayRaw.trim() : null
+      paymentDay: r.paymentDayRaw && r.paymentDayRaw.trim() !== '' ? r.paymentDayRaw.trim() : null,
+      customFields: r.customFields
     }));
 
     if (payloadToImport.length === 0) return;
 
     setProcessing(true);
-    const result = await uploadCustomersBatch(payloadToImport, importMode);
+    const result = await uploadCustomersBatch(payloadToImport, importMode, pendingCustomFieldDefinitions);
 
     if (result.ok) {
       setImportStats({ success: result.count || 0, failed: 0 });
+      setExistingCustomFieldDefinitions(pendingCustomFieldDefinitions);
       setStep('SUCCESS');
     } else {
       alert("Error al importar: " + result.error);
@@ -747,24 +838,86 @@ export default function ClientsUploadPage() {
               </div>
             )}
 
-            <div className="grid gap-6">
-              {MAPPING_FIELDS.map((f) => (
-                <div key={f.key} className="grid sm:grid-cols-[200px_1fr] items-center gap-4">
-                  <label className={`text-sm font-medium ${f.req ? 'text-white' : 'text-zinc-400'}`}>
-                    {f.label}
-                  </label>
-                  <select
-                    className="w-full sm:w-80 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
-                    value={mapping[f.key] || ''}
-                    onChange={(e) => setMapping(p => ({ ...p, [f.key]: e.target.value || null }))}
-                  >
-                    <option value="">-- Ignorar (No importar) --</option>
-                    {csvHeaders.map(h => (
-                      <option key={h} value={h}>{h}</option>
-                    ))}
-                  </select>
+            <div className="grid gap-8">
+              <section>
+                <div className="mb-5">
+                  <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-300">Campos Suscripta</h4>
+                  <p className="mt-1 text-xs text-zinc-500">Estos campos alimentan recordatorios, ciclos y estado operativo.</p>
                 </div>
-              ))}
+                <div className="grid gap-6">
+                  {MAPPING_FIELDS.map((f) => (
+                    <div key={f.key} className="grid sm:grid-cols-[200px_1fr] items-center gap-4">
+                      <label className={`text-sm font-medium ${f.req ? 'text-white' : 'text-zinc-400'}`}>
+                        {f.label}
+                      </label>
+                      <select
+                        className="w-full sm:w-80 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                        value={mapping[f.key] || ''}
+                        onChange={(e) => setMapping(p => ({ ...p, [f.key]: e.target.value || null }))}
+                      >
+                        <option value="">-- Ignorar (No importar) --</option>
+                        {csvHeaders.map(h => (
+                          <option key={h} value={h}>{h}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+                <div className="mb-5">
+                  <h4 className="text-sm font-semibold uppercase tracking-[0.18em] text-zinc-200">Campos personalizados</h4>
+                  <p className="mt-1 text-xs leading-5 text-zinc-500">
+                    Opcionales, máximo 4. No participan en automatización, filtros ni ciclos de pago.
+                    {existingCustomFieldDefinitions.length > 0 && importMode === 'append'
+                      ? ' La estructura ya está bloqueada para esta cuenta.'
+                      : ' Se bloquearán al importar.'}
+                  </p>
+                </div>
+                <div className="grid gap-4">
+                  {(existingCustomFieldDefinitions.length > 0 && importMode === 'append'
+                    ? customFieldDrafts.slice(0, existingCustomFieldDefinitions.length)
+                    : customFieldDrafts
+                  ).map((draft, index) => {
+                    const lockedDefinition = existingCustomFieldDefinitions[index];
+                    const locked = existingCustomFieldDefinitions.length > 0 && importMode === 'append';
+                    const label = locked ? lockedDefinition?.label ?? draft.label : draft.label;
+
+                    return (
+                      <div key={draft.key} className="grid gap-3 md:grid-cols-[220px_1fr] md:items-center">
+                        {locked ? (
+                          <label className="text-sm font-medium text-zinc-300">{label || `Campo ${index + 1}`}</label>
+                        ) : (
+                          <input
+                            type="text"
+                            value={draft.label}
+                            onChange={(event) => updateCustomFieldDraft(draft.key, { label: event.target.value })}
+                            placeholder={`Nombre visible ${index + 1}`}
+                            className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                          />
+                        )}
+                        <select
+                          className="w-full sm:w-80 bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all"
+                          value={draft.column || ''}
+                          onChange={(event) => {
+                            const column = event.target.value || null;
+                            updateCustomFieldDraft(draft.key, {
+                              column,
+                              label: !locked && column && !draft.label ? column : draft.label,
+                            });
+                          }}
+                        >
+                          <option value="">-- Ignorar --</option>
+                          {csvHeaders.map(h => (
+                            <option key={h} value={h}>{h}</option>
+                          ))}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
 
             <div className="mt-12 flex justify-end gap-4">
@@ -877,6 +1030,11 @@ export default function ClientsUploadPage() {
                     <th className="px-6 py-4 font-medium border-l border-white/5 bg-white/[0.01]">
                       DÍA / ANCLA
                     </th>
+                    {pendingCustomFieldDefinitions.map((field) => (
+                      <th key={field.key} className="px-6 py-4 font-medium border-l border-white/5">
+                        {field.label}
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -940,6 +1098,11 @@ export default function ClientsUploadPage() {
                           <p className="mt-1 max-w-xs whitespace-normal text-xs leading-5 text-yellow-400">{row.scheduleWarning}</p>
                         )}
                       </td>
+                      {pendingCustomFieldDefinitions.map((field) => (
+                        <td key={field.key} className="px-6 py-4 border-l border-white/5 text-sm text-zinc-300">
+                          {row.customFields[field.key] || <span className="text-zinc-600 italic">Vacío</span>}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
@@ -1008,6 +1171,7 @@ export default function ClientsUploadPage() {
             <p className="text-sm text-zinc-400 mb-6 leading-relaxed">
               Al confirmar esta selección, <strong>se archivarán en la Papelera (Soft Delete) absolutamente todos tus contactos actuales activos</strong> previo a iniciar la importación del nuevo archivo.
               Solo hazlo si deseas limpiar tu cartera de clientes y basarte puramente en este documento nuevo.
+              Si cambias la estructura de campos personalizados, los valores personalizados anteriores se perderán permanentemente.
             </p>
             <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-8">
               <button

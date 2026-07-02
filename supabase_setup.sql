@@ -187,6 +187,7 @@ CREATE TABLE IF NOT EXISTS public.customers (
     billing_cycle TEXT DEFAULT 'monthly',
     next_payment_date DATE,
     anchor_day SMALLINT CHECK (anchor_day BETWEEN 1 AND 31), -- Día fijo del mes para el anclaje de cobro
+    custom_fields JSONB NOT NULL DEFAULT '{}'::jsonb,
     
     -- Campos de Ciclo de Vida (Soft Delete & Pausas)
     is_active BOOLEAN DEFAULT true,
@@ -201,6 +202,29 @@ CREATE TABLE IF NOT EXISTS public.customers (
 );
 
 ALTER TABLE public.customers ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.customers
+ADD COLUMN IF NOT EXISTS custom_fields JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE OR REPLACE FUNCTION public.jsonb_object_key_count(data JSONB)
+RETURNS INTEGER AS $$
+    SELECT CASE
+        WHEN jsonb_typeof(COALESCE(data, '{}'::jsonb)) = 'object' THEN (
+            SELECT COUNT(*)::INTEGER
+            FROM jsonb_object_keys(COALESCE(data, '{}'::jsonb))
+        )
+        ELSE 999
+    END;
+$$ LANGUAGE SQL IMMUTABLE;
+
+ALTER TABLE public.customers
+DROP CONSTRAINT IF EXISTS customers_custom_fields_object_check;
+ALTER TABLE public.customers
+ADD CONSTRAINT customers_custom_fields_object_check
+CHECK (
+    jsonb_typeof(custom_fields) = 'object'
+    AND public.jsonb_object_key_count(custom_fields) <= 4
+);
 
 DROP POLICY IF EXISTS "Users can view their own customers" ON public.customers;
 CREATE POLICY "Users can view their own customers"
@@ -229,5 +253,47 @@ WITH CHECK (auth.uid() = user_id);
 DROP TRIGGER IF EXISTS update_customers_updated_at ON public.customers;
 CREATE TRIGGER update_customers_updated_at
 BEFORE UPDATE ON public.customers
+FOR EACH ROW
+EXECUTE FUNCTION update_updated_at_column();
+
+-- ==========================================
+-- Configuración de Campos Personalizados de Clientes
+-- ==========================================
+CREATE TABLE IF NOT EXISTS public.customer_custom_field_configs (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+    locked_at TIMESTAMP WITH TIME ZONE NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT customer_custom_field_configs_fields_array_check CHECK (
+        jsonb_typeof(fields) = 'array'
+        AND jsonb_array_length(fields) <= 4
+    )
+);
+
+ALTER TABLE public.customer_custom_field_configs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can view their own custom field config" ON public.customer_custom_field_configs;
+CREATE POLICY "Users can view their own custom field config"
+ON public.customer_custom_field_configs
+FOR SELECT
+USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can insert their own custom field config" ON public.customer_custom_field_configs;
+CREATE POLICY "Users can insert their own custom field config"
+ON public.customer_custom_field_configs
+FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update their own custom field config" ON public.customer_custom_field_configs;
+CREATE POLICY "Users can update their own custom field config"
+ON public.customer_custom_field_configs
+FOR UPDATE
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
+DROP TRIGGER IF EXISTS update_customer_custom_field_configs_updated_at ON public.customer_custom_field_configs;
+CREATE TRIGGER update_customer_custom_field_configs_updated_at
+BEFORE UPDATE ON public.customer_custom_field_configs
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();

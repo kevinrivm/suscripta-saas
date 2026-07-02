@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { parsePhoneNumber, type CountryCode } from 'libphonenumber-js';
 import { addManualCustomer } from '@/app/actions/customers';
+import type { CustomFieldDefinition, CustomFieldValues } from '@/utils/customers/custom-fields';
 
 interface ContactExportRow {
     id?: string | number | null;
@@ -17,6 +18,7 @@ interface ContactExportRow {
     payment_status?: string | null;
     is_active?: boolean | null;
     deleted_at?: string | null;
+    custom_fields?: CustomFieldValues | null;
 }
 
 const COMMON_COUNTRIES: { code: CountryCode, label: string, placeholder: string }[] = [
@@ -46,7 +48,15 @@ function getBrowserCountry(): CountryCode {
     return supported?.code ?? 'MX';
 }
 
-export default function ContactsHeaderActions({ currentTab, rawData }: { currentTab: string, rawData: ContactExportRow[] }) {
+export default function ContactsHeaderActions({
+    currentTab,
+    rawData,
+    customFieldDefinitions,
+}: {
+    currentTab: string,
+    rawData: ContactExportRow[],
+    customFieldDefinitions: CustomFieldDefinition[],
+}) {
     const [isExporting, setIsExporting] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     
@@ -58,6 +68,7 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
     const [mCycle, setMCycle] = useState('monthly');
     const [mNextPaymentDate, setMNextPaymentDate] = useState('');
     const [mPaymentDay, setMPaymentDay] = useState('');
+    const [mCustomFields, setMCustomFields] = useState<CustomFieldValues>({});
     const [formError, setFormError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const router = useRouter();
@@ -71,9 +82,31 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
         try {
             if (rawData.length === 0) return alert('No hay datos en esta pestaña para exportar.');
             const csvRows = [];
-            csvRows.push(['ID', 'Telefono', 'First Name', 'Last Name 1', 'Last Name 2', 'Ciclo', 'Status Pago', 'Activo', 'Archivado'].join(','));
+            csvRows.push([
+                'ID',
+                'Telefono',
+                'First Name',
+                'Last Name 1',
+                'Last Name 2',
+                'Ciclo',
+                'Status Pago',
+                'Activo',
+                'Archivado',
+                ...customFieldDefinitions.map((field) => field.label),
+            ].join(','));
             for (const r of rawData) {
-                const vals = [r.id, r.phone_number, r.first_name, r.last_name_1, r.last_name_2, r.billing_cycle, r.payment_status, r.is_active, !!r.deleted_at];
+                const vals = [
+                    r.id,
+                    r.phone_number,
+                    r.first_name,
+                    r.last_name_1,
+                    r.last_name_2,
+                    r.billing_cycle,
+                    r.payment_status,
+                    r.is_active,
+                    !!r.deleted_at,
+                    ...customFieldDefinitions.map((field) => r.custom_fields?.[field.key] ?? ''),
+                ];
                 csvRows.push(vals.map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(','));
             }
             const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
@@ -134,7 +167,8 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
             lastName2: mLast2.trim(),
             billingCycle: mCycle,
             nextPaymentDate: mNextPaymentDate || null,
-            paymentDay: mPaymentDay.trim() || null
+            paymentDay: mPaymentDay.trim() || null,
+            customFields: mCustomFields
         });
         setIsSubmitting(false);
         if (res.ok) {
@@ -146,6 +180,7 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
             setMCycle('monthly');
             setMNextPaymentDate('');
             setMPaymentDay('');
+            setMCustomFields({});
             setFormError(null);
             router.refresh();
         } else {
@@ -252,6 +287,28 @@ export default function ContactsHeaderActions({ currentTab, rawData }: { current
                             <p className="text-xs leading-5 text-zinc-500">
                                 Para automatizar recordatorios, agrega Fecha de próximo pago o Día de pago. En semanal/quincenal, el día usa 1-7.
                             </p>
+                            {customFieldDefinitions.length > 0 && (
+                                <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+                                    <h4 className="mb-3 text-sm font-semibold text-white">Campos personalizados</h4>
+                                    <div className="space-y-3">
+                                        {customFieldDefinitions.map((field) => (
+                                            <div key={field.key}>
+                                                <label className="text-xs text-zinc-400 font-medium ml-1">{field.label}</label>
+                                                <input
+                                                    type="text"
+                                                    value={mCustomFields[field.key] ?? ''}
+                                                    onChange={(event) => setMCustomFields((current) => ({
+                                                        ...current,
+                                                        [field.key]: event.target.value,
+                                                    }))}
+                                                    placeholder="Opcional"
+                                                    className="w-full mt-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none text-white transition-colors"
+                                                />
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {formError && (
                                 <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs leading-5 text-red-300">
                                     {formError}

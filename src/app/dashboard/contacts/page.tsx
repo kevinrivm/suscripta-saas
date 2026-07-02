@@ -3,6 +3,7 @@ import { createClient } from '@/utils/supabase/server';
 import ContactsHeaderActions from './ContactsHeaderActions';
 import ContactsTable, { type ContactRow } from './ContactsTable';
 import { getTodayDateString } from '@/utils/customers/billing-cycles';
+import { normalizeCustomFieldDefinitions } from '@/utils/customers/custom-fields';
 
 export const dynamic = 'force-dynamic';
 
@@ -134,7 +135,12 @@ export default async function Contacts(props: { searchParams: Promise<SearchPara
 
   const { data: contacts, error, count: filteredCount } = await query;
   const { data: filteredIdsData } = await filteredIdsQuery;
+  const { data: customFieldConfig } = await supabase
+    .from('customer_custom_field_configs')
+    .select('fields')
+    .maybeSingle();
   const today = getTodayDateString();
+  const customFieldDefinitions = normalizeCustomFieldDefinitions(customFieldConfig?.fields ?? []);
 
   const { count: totalGlobalCount } = await supabase
     .from('customers')
@@ -167,7 +173,7 @@ export default async function Contacts(props: { searchParams: Promise<SearchPara
         </div>
       </div>
 
-      <ContactsHeaderActions currentTab={tab} rawData={contacts || []} />
+      <ContactsHeaderActions currentTab={tab} rawData={contacts || []} customFieldDefinitions={customFieldDefinitions} />
 
       <div className="mb-5 rounded-[24px] border border-white/10 bg-[#0b0b0d] p-5">
         <form className="grid gap-4 lg:grid-cols-[1fr_1fr_1.4fr_auto] lg:items-end">
@@ -249,6 +255,7 @@ export default async function Contacts(props: { searchParams: Promise<SearchPara
         baseQuery={currentQuery}
         tab={tab}
         totalGlobalCount={totalGlobalCount ?? 0}
+        customFieldDefinitions={customFieldDefinitions}
       />
 
       <div className="mt-4 rounded-[24px] border border-white/10 bg-black/20 p-5 text-xs text-zinc-500">

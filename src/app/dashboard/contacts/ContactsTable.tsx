@@ -13,8 +13,10 @@ import {
   bulkSoftDeleteCustomers,
   bulkUpdateCustomerActiveStatus,
   bulkUpdateCustomerPaymentStatus,
+  updateCustomerCustomField,
 } from '@/app/actions/customers';
 import { isPaymentOverdue } from '@/utils/customers/billing-cycles';
+import type { CustomFieldDefinition, CustomFieldKey, CustomFieldValues } from '@/utils/customers/custom-fields';
 
 type PaymentStatus = 'pending' | 'paid' | 'cancelled';
 
@@ -30,6 +32,7 @@ export type ContactRow = {
   payment_status: string | null;
   is_active: boolean;
   deleted_at: string | null;
+  custom_fields: CustomFieldValues | null;
 };
 
 type Props = {
@@ -41,7 +44,71 @@ type Props = {
   baseQuery: Record<string, string>;
   tab: string;
   totalGlobalCount: number;
+  customFieldDefinitions: CustomFieldDefinition[];
 };
+
+const SELECT_COLUMN_WIDTH = 52;
+const NAME_COLUMN_WIDTH = 210;
+const stickySelectBaseClass = 'sticky left-0 w-[52px] min-w-[52px] shadow-[1px_0_0_rgba(255,255,255,0.06)]';
+const stickyNameBaseClass = 'sticky left-[52px] w-[210px] min-w-[210px] shadow-[1px_0_0_rgba(255,255,255,0.06)]';
+const stickySelectHeaderClass = `${stickySelectBaseClass} z-40 bg-[#111]`;
+const stickyNameHeaderClass = `${stickyNameBaseClass} z-40 bg-[#111]`;
+const stickySelectCellClass = `${stickySelectBaseClass} z-30 bg-[#0b0b0d]`;
+const stickyNameCellClass = `${stickyNameBaseClass} z-20 bg-[#0b0b0d]`;
+const headerCellClass = 'px-5 py-5 text-left align-middle whitespace-nowrap';
+const borderedHeaderCellClass = `${headerCellClass} border-l border-white/5`;
+const customFieldColumnClass = 'w-[150px] min-w-[150px] max-w-[150px]';
+
+function CustomFieldCell({
+  customerId,
+  fieldKey,
+  value,
+  disabled,
+}: {
+  customerId: string;
+  fieldKey: CustomFieldKey;
+  value: string;
+  disabled: boolean;
+}) {
+  const [localValue, setLocalValue] = useState(value);
+  const [savedValue, setSavedValue] = useState(value);
+  const [isSaving, startTransition] = useTransition();
+  const router = useRouter();
+
+  const saveValue = () => {
+    if (disabled || localValue === savedValue) return;
+
+    startTransition(async () => {
+      const result = await updateCustomerCustomField(customerId, fieldKey, localValue);
+      if (!result.ok) {
+        alert(result.error || 'No se pudo guardar el campo personalizado.');
+        setLocalValue(savedValue);
+        return;
+      }
+      setSavedValue(localValue);
+      router.refresh();
+    });
+  };
+
+  return (
+    <input
+      type="text"
+      value={localValue}
+      disabled={disabled || isSaving}
+      onChange={(event) => setLocalValue(event.target.value)}
+      onBlur={saveValue}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+        if (event.key === 'Escape') {
+          setLocalValue(savedValue);
+          event.currentTarget.blur();
+        }
+      }}
+      className="w-[132px] rounded-lg border border-transparent bg-transparent px-3 py-2 text-sm text-zinc-300 outline-none transition-colors hover:border-white/10 hover:bg-white/5 focus:border-emerald-500 focus:bg-black/40 disabled:opacity-50"
+      placeholder="-"
+    />
+  );
+}
 
 function formatPhone(e164: string): { countryCode: string; local: string } {
   try {
@@ -75,6 +142,7 @@ export default function ContactsTable({
   baseQuery,
   tab,
   totalGlobalCount,
+  customFieldDefinitions,
 }: Props) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
@@ -99,10 +167,10 @@ export default function ContactsTable({
     const nextDir = active && sortDir === 'asc' ? 'desc' : 'asc';
 
     return (
-      <th className={`px-6 py-5 ${className}`}>
+      <th className={`${headerCellClass} ${className}`}>
         <Link
           href={buildHref({ sort: column, dir: nextDir, page: '1' })}
-          className="inline-flex items-center gap-1.5 group hover:text-white transition-colors"
+          className="inline-flex items-center justify-start gap-1.5 group hover:text-white transition-colors"
           replace
         >
           {label}
@@ -224,10 +292,23 @@ export default function ContactsTable({
       )}
 
       <div className="overflow-x-auto w-full border border-white/5 rounded-[24px]">
-        <table className="w-full text-left text-sm text-zinc-300">
+        <table className="min-w-max w-full table-auto text-left text-sm text-zinc-300">
+          <colgroup>
+            <col style={{ width: SELECT_COLUMN_WIDTH }} />
+            <col style={{ width: NAME_COLUMN_WIDTH }} />
+            <col className="w-[205px]" />
+            <col className="w-[165px]" />
+            <col className="w-[180px]" />
+            <col className="w-[150px]" />
+            {customFieldDefinitions.map((field) => (
+              <col key={field.key} className={customFieldColumnClass} />
+            ))}
+            <col className="w-[130px]" />
+            <col className="w-[120px]" />
+          </colgroup>
           <thead className="bg-[#111] text-xs uppercase font-semibold tracking-wider text-zinc-500 border-b border-white/10">
             <tr>
-              <th className="w-12 px-4 py-5 text-center">
+              <th className={`${stickySelectHeaderClass} px-4 py-5 text-center align-middle`}>
                 <input
                   type="checkbox"
                   checked={visibleSelected}
@@ -236,13 +317,18 @@ export default function ContactsTable({
                   className="h-4 w-4 rounded border-white/20 bg-black accent-emerald-500"
                 />
               </th>
-              {renderSortHeader('Nombre Completo', 'name')}
-              {renderSortHeader('Teléfono', 'phone')}
-              {renderSortHeader('Ciclo (Frecuencia)', 'cycle', 'border-l border-white/5')}
-              {renderSortHeader('Fecha de Pago', 'date', 'border-l border-white/5')}
-              {renderSortHeader('Estado de Pago', 'status', 'text-emerald-400 border-l bg-emerald-500/5 border-white/5 text-center')}
-              <th className="px-6 py-5 border-l border-white/5 text-center">Estatus</th>
-              <th className="px-6 py-5 border-l border-white/5 text-center">Eliminar</th>
+              {renderSortHeader('Nombre Completo', 'name', stickyNameHeaderClass)}
+              {renderSortHeader('Teléfono', 'phone', 'w-[205px] min-w-[205px]')}
+              {renderSortHeader('Ciclo (Frecuencia)', 'cycle', `${borderedHeaderCellClass} w-[165px] min-w-[165px]`)}
+              {renderSortHeader('Fecha de Pago', 'date', `${borderedHeaderCellClass} w-[180px] min-w-[180px]`)}
+              {renderSortHeader('Estado de Pago', 'status', `${borderedHeaderCellClass} w-[150px] min-w-[150px] text-emerald-400 bg-emerald-500/5`)}
+              {customFieldDefinitions.map((field) => (
+                <th key={field.key} className={`${borderedHeaderCellClass} ${customFieldColumnClass} text-zinc-400`}>
+                  <span className="block truncate" title={field.label}>{field.label}</span>
+                </th>
+              ))}
+              <th className={`${borderedHeaderCellClass} w-[130px] min-w-[130px]`}>Estatus</th>
+              <th className={`${borderedHeaderCellClass} w-[120px] min-w-[120px]`}>Eliminar</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5 bg-black/50">
@@ -259,7 +345,7 @@ export default function ContactsTable({
 
                 return (
                   <tr key={contact.id} className="hover:bg-white/[0.02] transition-colors relative group">
-                    <td className="px-4 py-4 text-center">
+                    <td className={`${stickySelectCellClass} px-4 py-4 text-center align-middle transition-colors group-hover:bg-[#101012]`}>
                       <input
                         type="checkbox"
                         checked={selected}
@@ -275,37 +361,39 @@ export default function ContactsTable({
                         className="h-4 w-4 rounded border-white/20 bg-black accent-emerald-500"
                       />
                     </td>
-                    <td className="px-6 py-4 font-medium text-white whitespace-nowrap">{nombreAgrupado}</td>
-                    <td className="px-6 py-4 font-mono">
+                    <td className={`${stickyNameCellClass} px-5 py-4 font-medium text-white transition-colors group-hover:bg-[#101012]`}>
+                      <span className="block max-w-[170px] truncate" title={nombreAgrupado}>{nombreAgrupado}</span>
+                    </td>
+                    <td className="w-[205px] min-w-[205px] px-5 py-4 font-mono whitespace-nowrap">
                       {(() => {
                         const { countryCode, local } = formatPhone(contact.phone_number);
                         return countryCode ? (
-                          <span className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-1.5 whitespace-nowrap">
                             <span className="text-zinc-500 text-xs bg-white/5 border border-white/10 px-1.5 py-0.5 rounded font-semibold">
                               ({countryCode})
                             </span>
-                            <span className="text-zinc-300 text-sm tracking-wide">{local}</span>
+                            <span className="whitespace-nowrap text-zinc-300 text-sm tracking-wide">{local}</span>
                           </span>
                         ) : (
-                          <span className="text-zinc-400 text-xs">{local}</span>
+                          <span className="whitespace-nowrap text-zinc-400 text-xs">{local}</span>
                         );
                       })()}
                     </td>
-                    <td className="border-l border-white/5">
+                    <td className="w-[165px] min-w-[165px] border-l border-white/5">
                       <CycleSelector
                         customerId={contact.id}
                         billingCycle={contact.billing_cycle || 'monthly'}
                         nextPaymentDate={contact.next_payment_date}
                       />
                     </td>
-                    <td className="border-l border-white/5">
+                    <td className="w-[180px] min-w-[180px] border-l border-white/5">
                       <RescheduleDateModal
                         customerId={contact.id}
                         currentDate={contact.next_payment_date}
                         anchorDay={contact.anchor_day ?? null}
                       />
                     </td>
-                    <td className="px-6 py-4 border-l border-white/5 align-middle">
+                    <td className="w-[150px] min-w-[150px] px-4 py-4 border-l border-white/5 align-middle">
                       <div className="flex justify-center">
                         <PaymentStatusSelector
                           customerId={contact.id}
@@ -315,14 +403,24 @@ export default function ContactsTable({
                         />
                       </div>
                     </td>
-                    <td className="border-l border-white/5">
+                    {customFieldDefinitions.map((field) => (
+                      <td key={field.key} className={`${customFieldColumnClass} border-l border-white/5 px-2 py-3`}>
+                        <CustomFieldCell
+                          customerId={contact.id}
+                          fieldKey={field.key}
+                          value={contact.custom_fields?.[field.key] ?? ''}
+                          disabled={!!contact.deleted_at}
+                        />
+                      </td>
+                    ))}
+                    <td className="w-[130px] min-w-[130px] border-l border-white/5">
                       <StatusToggleAction
                         customerId={contact.id}
                         isActive={contact.is_active}
                         isDeleted={!!contact.deleted_at}
                       />
                     </td>
-                    <td className="border-l border-white/5">
+                    <td className="w-[120px] min-w-[120px] border-l border-white/5">
                       <DeleteAction
                         customerId={contact.id}
                         isDeleted={!!contact.deleted_at}
@@ -333,7 +431,7 @@ export default function ContactsTable({
               })
             ) : (
               <tr>
-                <td colSpan={8} className="px-6 py-16 text-center">
+                <td colSpan={8 + customFieldDefinitions.length} className="px-6 py-16 text-center">
                   <div className="flex flex-col items-center justify-center">
                     <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
                       <svg className="w-8 h-8 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
